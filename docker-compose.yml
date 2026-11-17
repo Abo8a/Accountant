@@ -64,13 +64,7 @@ services:
     logging: *logging
 
   parser:
-    build:
-      context: ./backend/parser-service
-      args:
-        # Зеркало Debian для apt. По умолчанию официальный; на сервере с ограниченным доступом задаётся в .env.
-        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-deb.debian.org}
-        # Индекс pip. По умолчанию PyPI; на сервере — зеркало (задаётся в .env).
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    build: ./backend/parser-service
     restart: unless-stopped
     ports:
       - "${PARSER_HOST_PORT:?}:8000"
