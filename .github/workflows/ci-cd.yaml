@@ -1,11 +1,11 @@
-name: CI/CD
+name: Tests + Deploy
 
 # Тесты на каждый push и PR; сборка образов и деплой — только с main.
 # Секреты деплоя лежат в окружении production (Settings → Environments): HOST, SSH_PORT, SSH_USER, SSH_PRIVATE_KEY,
 # KNOWN_HOSTS, DEPLOY_PATH, SITE_URL, ENV_FILE (полный .env сервера), GHCR_READ_TOKEN, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY.
 # KNOWN_HOSTS для нестандартного порта: строка вида «[93.100.198.182]:2222 ssh-ed25519 AAAA…» (получить: ssh-keyscan -p 2222 93.100.198.182).
 # На окружении production стоит включить Required reviewers — тогда деплой ждёт подтверждения.
-# Секрет EMBEDDING_API_KEY (репозиторий) нужен трём RAG-тестам; без него они краснеют.
+# Секрет EMBEDDING_API_KEY (репозиторий) нужен для заполнения RAG-базы и трём RAG-тестам; без него они краснеют.
 
 on:
   push:
@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   test-node:
-    name: "Тесты: контракты, пайплайн, фронтенд"
+    name: "Tests: contracts, pipeline, frontend"
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -36,16 +36,21 @@ jobs:
 
       - run: npm ci
 
-      - name: Типы (все воркспейсы)
+      - name: Typecheck (all workspaces)
         run: npm run typecheck
 
-      - name: Тесты
+      - name: Seed RAG database (cards from TechLead8.xlsx)
+        env:
+          EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
+        run: npm run seed:rag -w @passport/pipeline-api
+
+      - name: Tests
         env:
           EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
         run: npx vitest run
 
   test-parser:
-    name: Тесты парсера (Python)
+    name: Parser tests (Python)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -57,7 +62,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/parser-service/requirements.txt
 
-      - name: Зависимости
+      - name: Dependencies
         working-directory: backend/parser-service
         run: pip install -r requirements.txt
 
@@ -66,7 +71,7 @@ jobs:
         run: python -m pytest -q
 
   build-images:
-    name: Сборка и публикация образов (GHCR)
+    name: Build and publish images (GHCR)
     needs: [test-node, test-parser]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -78,7 +83,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Префикс образов (GHCR требует нижний регистр)
+      - name: Image prefix (GHCR requires lowercase)
         run: echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/passport" >> "$GITHUB_ENV"
 
       - uses: docker/setup-buildx-action@v3
@@ -89,7 +94,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Образ pipeline (и db-migrate — тот же образ)
+      - name: Pipeline image (db-migrate uses the same image)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -99,7 +104,7 @@ jobs:
           cache-from: type=gha,scope=pipeline
           cache-to: type=gha,mode=max,scope=pipeline
 
-      - name: Образ parser
+      - name: Parser image
         uses: docker/build-push-action@v6
         with:
           context: backend/parser-service
@@ -108,7 +113,7 @@ jobs:
           cache-from: type=gha,scope=parser
           cache-to: type=gha,mode=max,scope=parser
 
-      - name: "Значения VITE_* из ENV_FILE (для сборки фронтенда)"
+      - name: "VITE_* values from ENV_FILE (for the frontend build)"
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
         run: |
@@ -116,10 +121,10 @@ jobs:
           # Без адреса API фронтенд уйдёт в демо-режим: такую сборку не публикуем.
           for key in VITE_PIPELINE_URL VITE_SUPPORT_ENDPOINT VITE_AUTH_ENDPOINT VITE_CHAT_ENDPOINT; do
             value=$(printf '%s\n' "$ENV_FILE" | sed -n "s/^${key}=//p" | head -1)
-            if [ -z "$value" ]; then echo "В ENV_FILE не задан ${key}"; exit 1; fi
+            if [ -z "$value" ]; then echo "ENV_FILE is missing ${key}"; exit 1; fi
           done
 
-      - name: Образ frontend
+      - name: Frontend image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -137,7 +142,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=frontend
 
   deploy:
-    name: Деплой на сервер
+    name: Deploy to server
     needs: build-images
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -145,10 +150,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Префикс образов
+      - name: Image prefix
         run: echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/passport" >> "$GITHUB_ENV"
 
-      - name: Подключение к серверу
+      - name: Connect to server
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           KNOWN_HOSTS: ${{ secrets.KNOWN_HOSTS }}
@@ -158,7 +163,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
 
-      - name: "Файл окружения: секреты сервера и теги образов этого коммита"
+      - name: "Environment file: server secrets and image tags for this commit"
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
         run: |
@@ -169,7 +174,7 @@ jobs:
             echo "IMAGE_FRONTEND=${IMAGE_PREFIX}-frontend:${GITHUB_SHA}"
           } > deploy.env
 
-      - name: Копирование конфигурации на сервер
+      - name: Copy configuration to server
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
@@ -185,7 +190,7 @@ jobs:
           scp -P "$SSH_PORT" deploy/Caddyfile "$SSH_USER@$HOST:$DEPLOY_PATH/deploy/"
           ssh -p "$SSH_PORT" "$SSH_USER@$HOST" "mv '$DEPLOY_PATH/deploy.env' '$DEPLOY_PATH/.env' && chmod 600 '$DEPLOY_PATH/.env'"
 
-      - name: Обновление контейнеров (docker compose ждёт healthcheck)
+      - name: Update containers (docker compose waits for healthchecks)
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
@@ -204,7 +209,7 @@ jobs:
             \$COMPOSE ps
           EOF
 
-      - name: Проверка сайта
+      - name: Site check
         env:
           SITE_URL: ${{ secrets.SITE_URL }}
         run: curl --fail --silent --show-error --max-time 30 "$SITE_URL/" > /dev/null
