@@ -1,7 +1,7 @@
 // Проверка JSON-ответов LLM. Всё, что не проходит схему, превращается в INTERNAL (а не в мусор в БД).
 import { z } from 'zod';
 import { PipelineFailure } from '../errors';
-import type { LlmClient, LlmCompleteOptions, LlmTask } from './types';
+import type { LlmClient, LlmTask } from './types';
 
 const claimSchema = z.object({
   claim_text: z.string().min(1),
@@ -121,9 +121,8 @@ export async function callLlm<S extends z.ZodTypeAny>(
   task: LlmTask,
   input: unknown,
   schema: S,
-  options?: LlmCompleteOptions,
 ): Promise<z.output<S>> {
-  const raw = await llm.complete(task, input, options);
+  const raw = await llm.complete(task, input);
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     throw new PipelineFailure('INTERNAL', `LLM (${task}) вернул неверный формат: ${parsed.error.message}`);

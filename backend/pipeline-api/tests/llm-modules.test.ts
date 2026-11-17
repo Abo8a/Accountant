@@ -57,34 +57,42 @@ describe('функция cleanLLMJsonOutput', () => {
 });
 
 describe('reasoning_effort и temperature по задачам', () => {
-  const EXPECTED = {
-    audit: { reasoningEffort: 'high', temperature: 0.1 },
-    extract: { reasoningEffort: 'medium', temperature: 0.1 },
-    anchor: { reasoningEffort: 'low', temperature: 0.1 },
-    consultantOff: { reasoningEffort: 'low', temperature: 0.3 },
-    consultantOn: { reasoningEffort: 'high', temperature: 0.2 },
-  } as const;
+  const HIGH = { reasoningEffort: 'high', temperature: 0.1 };
+  const MEDIUM = { reasoningEffort: 'medium', temperature: 0.1 };
+  const FAST = { reasoningEffort: undefined, temperature: 0.1 };
+  const CONSULTANT_OFF = { reasoningEffort: undefined, temperature: 0.3 };
+  const CONSULTANT_ON = { reasoningEffort: 'medium', temperature: 0.3 };
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('resolveLlmParams: значения для audit, extract, anchor и consultant (thinking выкл./вкл.)', () => {
-    expect(resolveLlmParams('audit')).toEqual(EXPECTED.audit);
-    expect(resolveLlmParams('extract')).toEqual(EXPECTED.extract);
-    expect(resolveLlmParams('anchor')).toEqual(EXPECTED.anchor);
-    expect(resolveLlmParams('consultant')).toEqual(EXPECTED.consultantOff);
-    expect(resolveLlmParams('consultant', { thinking: false })).toEqual(EXPECTED.consultantOff);
-    expect(resolveLlmParams('consultant', { thinking: true })).toEqual(EXPECTED.consultantOn);
+  it('resolveLlmParams: audit, validate_answer, novelty → high / 0.1; extract → medium / 0.1', () => {
+    expect(resolveLlmParams('audit')).toEqual(HIGH);
+    expect(resolveLlmParams('validate_answer')).toEqual(HIGH);
+    expect(resolveLlmParams('novelty')).toEqual(HIGH);
+    expect(resolveLlmParams('extract')).toEqual(MEDIUM);
   });
 
-  it('thinking не влияет на задачи, кроме consultant', () => {
-    expect(resolveLlmParams('audit', { thinking: true })).toEqual(EXPECTED.audit);
-    expect(resolveLlmParams('extract', { thinking: true })).toEqual(EXPECTED.extract);
-    expect(resolveLlmParams('anchor', { thinking: true })).toEqual(EXPECTED.anchor);
+  it('resolveLlmParams: anchor и navigator → 0.1 без reasoningEffort', () => {
+    expect(resolveLlmParams('anchor')).toEqual(FAST);
+    expect(resolveLlmParams('navigator')).toEqual(FAST);
   });
 
-  it('OpenAiClient (fetch): в тело запроса уходят reasoning_effort и temperature', async () => {
+  it('resolveLlmParams: consultant → 0.3; reasoningEffort medium только при thinking: true во входном объекте', () => {
+    expect(resolveLlmParams('consultant', {})).toEqual(CONSULTANT_OFF);
+    expect(resolveLlmParams('consultant', { thinking: false })).toEqual(CONSULTANT_OFF);
+    expect(resolveLlmParams('consultant', 'строка вместо объекта')).toEqual(CONSULTANT_OFF);
+    expect(resolveLlmParams('consultant', { thinking: true })).toEqual(CONSULTANT_ON);
+  });
+
+  it('thinking во входном объекте не влияет на другие задачи', () => {
+    expect(resolveLlmParams('audit', { thinking: true })).toEqual(HIGH);
+    expect(resolveLlmParams('extract', { thinking: true })).toEqual(MEDIUM);
+    expect(resolveLlmParams('anchor', { thinking: true })).toEqual(FAST);
+  });
+
+  it('OpenAiClient (fetch): reasoning_effort уходит в тело запроса только когда задан', async () => {
     const bodies: any[] = [];
     const fetchImpl = (async (_url: string, init: any) => {
       bodies.push(JSON.parse(init.body));
@@ -95,42 +103,46 @@ describe('reasoning_effort и temperature по задачам', () => {
     await client.complete('audit', {});
     await client.complete('extract', {});
     await client.complete('anchor', {});
-    await client.complete('consultant', {});
-    await client.complete('consultant', {}, { thinking: false });
-    await client.complete('consultant', {}, { thinking: true });
+    await client.complete('consultant', { thinking: false });
+    await client.complete('consultant', { thinking: true });
 
-    const pick = (b: any) => ({ reasoningEffort: b.reasoning_effort, temperature: b.temperature });
-    expect(bodies.map(pick)).toEqual([
-      EXPECTED.audit,
-      EXPECTED.extract,
-      EXPECTED.anchor,
-      EXPECTED.consultantOff,
-      EXPECTED.consultantOff,
-      EXPECTED.consultantOn,
-    ]);
+    expect(bodies.map((b) => b.reasoning_effort)).toEqual(['high', 'medium', undefined, undefined, 'medium']);
+    expect(bodies.map((b) => 'reasoning_effort' in b)).toEqual([true, true, false, false, true]);
+    expect(bodies.map((b) => b.temperature)).toEqual([0.1, 0.1, 0.1, 0.3, 0.3]);
   });
 
-  it('OpenAiClient (SDK): audit уходит в Kimi, остальные задачи — в DeepSeek, с reasoning_effort', async () => {
+  it('OpenAiClient (SDK): audit и validate_answer уходят в Kimi, остальное — в DeepSeek, с нужными параметрами', async () => {
     const reply = { choices: [{ message: { content: '{"ok":true}' } }] } as any;
     const kimiSpy = vi.spyOn(kimiClient.chat.completions, 'create').mockResolvedValue(reply);
     const deepseekSpy = vi.spyOn(deepseekClient.chat.completions, 'create').mockResolvedValue(reply);
     const client = new OpenAiClient();
 
     await client.complete('audit', {});
-    expect(kimiSpy).toHaveBeenCalledTimes(1);
-    expect(kimiSpy.mock.calls[0][0]).toMatchObject({ reasoning_effort: 'high', temperature: 0.1 });
+    await client.complete('validate_answer', {});
+    expect(kimiSpy).toHaveBeenCalledTimes(2);
+    for (const [body] of kimiSpy.mock.calls) {
+      expect(body).toMatchObject({ reasoning_effort: 'high', temperature: 0.1 });
+    }
 
+    await client.complete('novelty', {});
     await client.complete('extract', {});
     await client.complete('anchor', {});
-    await client.complete('consultant', {}, { thinking: false });
-    await client.complete('consultant', {}, { thinking: true });
+    await client.complete('consultant', { thinking: false });
+    await client.complete('consultant', { thinking: true });
 
-    expect(deepseekSpy).toHaveBeenCalledTimes(4);
+    expect(deepseekSpy).toHaveBeenCalledTimes(5);
     const sent = deepseekSpy.mock.calls.map(([body]) => ({
       reasoningEffort: (body as any).reasoning_effort,
       temperature: (body as any).temperature,
+      hasMaxTokens: 'max_tokens' in (body as any),
     }));
-    expect(sent).toEqual([EXPECTED.extract, EXPECTED.anchor, EXPECTED.consultantOff, EXPECTED.consultantOn]);
+    expect(sent).toEqual([
+      { ...HIGH, hasMaxTokens: false },
+      { ...MEDIUM, hasMaxTokens: false },
+      { ...FAST, hasMaxTokens: false },
+      { ...CONSULTANT_OFF, hasMaxTokens: false },
+      { ...CONSULTANT_ON, hasMaxTokens: false },
+    ]);
   });
 });
 

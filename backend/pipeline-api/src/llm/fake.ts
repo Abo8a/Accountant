@@ -1,5 +1,5 @@
 // Детерминированная заглушка LLM для тестов и локальной отладки без ключа API.
-import { EMBEDDING_DIM, type LlmClient, type LlmCompleteOptions, type LlmTask } from './types';
+import { EMBEDDING_DIM, type LlmClient, type LlmTask } from './types';
 
 type Override = (input: any) => unknown;
 
@@ -23,7 +23,7 @@ export function hashEmbedding(text: string, dim = EMBEDDING_DIM): number[] {
 
 export class FakeLlm implements LlmClient {
   readonly model = 'fake-llm';
-  readonly calls: { task: LlmTask; input: any; options?: LlmCompleteOptions }[] = [];
+  readonly calls: { task: LlmTask; input: any }[] = [];
 
   /** Переопределения ответов по задаче (для сценариев тестов). */
   constructor(private readonly overrides: Partial<Record<LlmTask, Override>> = {}) {}
@@ -32,8 +32,8 @@ export class FakeLlm implements LlmClient {
     return Boolean(this.overrides[task]);
   }
 
-  async complete(task: LlmTask, input: any, options?: LlmCompleteOptions): Promise<unknown> {
-    this.calls.push({ task, input, options });
+  async complete(task: LlmTask, input: any): Promise<unknown> {
+    this.calls.push({ task, input });
     const override = this.overrides[task];
     if (override) {
       const res = (await override(input)) as any;

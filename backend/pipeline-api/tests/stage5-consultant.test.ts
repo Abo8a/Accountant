@@ -311,7 +311,7 @@ describe('Этап 5 (Задача 4.1): Сквозной модуль ИИ-Ко
   // ---------------------------------------------------------------------------
   // Тест 5: Флаг thinking («Думать глубже»)
   // ---------------------------------------------------------------------------
-  it('Тест 5: флаг thinking передаётся в LLM (по умолчанию false) и валидируется схемой', async () => {
+  it('Тест 5: флаг thinking попадает в payload консультанта (по умолчанию false) и валидируется схемой', async () => {
     const userId = await createUser(db.sql, { name: 'Глеб Глубокий' });
     const consultantCalls = () => llm.calls.filter((c) => c.task === 'consultant');
     const post = (message: string, extra: Record<string, unknown>) =>
@@ -332,9 +332,9 @@ describe('Этап 5 (Задача 4.1): Сквозной модуль ИИ-Ко
 
     // Без поля thinking и с thinking: false → false; с thinking: true → true
     expect(callFor('thinking-marker-default')).toHaveLength(1);
-    expect(callFor('thinking-marker-default')[0].options?.thinking).toBe(false);
-    expect(callFor('thinking-marker-false')[0].options?.thinking).toBe(false);
-    expect(callFor('thinking-marker-true')[0].options?.thinking).toBe(true);
+    expect(callFor('thinking-marker-default')[0].input?.thinking).toBe(false);
+    expect(callFor('thinking-marker-false')[0].input?.thinking).toBe(false);
+    expect(callFor('thinking-marker-true')[0].input?.thinking).toBe(true);
 
     // Не boolean → 400, LLM не вызывается
     const bad = await post('thinking-marker-bad', { thinking: 'yes' });

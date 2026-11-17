@@ -179,12 +179,11 @@ export async function handleConsultantChat(
         }
       : null,
     rag_context: ragContextText,
+    thinking: Boolean(req.thinking),
   };
 
   // Вызов LLM (DeepSeek Flash)
-  const out = await callLlm(deps.llm, 'consultant', payload, consultantSchema, {
-    thinking: req.thinking === true,
-  });
+  const out = await callLlm(deps.llm, 'consultant', payload, consultantSchema);
 
   // Сохраняем ответ ассистента в БД
   const assistantMsgRow = await deps.store.insertChatMessage({

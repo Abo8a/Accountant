@@ -1,6 +1,6 @@
 import { PipelineFailure } from '../errors';
 import { SYSTEM_PROMPTS } from './prompts';
-import type { LlmClient, LlmCompleteOptions, LlmTask } from './types';
+import type { LlmClient, LlmTask } from './types';
 import { callDeepSeek, callKimi, cleanLLMJsonOutput, type ReasoningEffort } from '../llm';
 import { getEmbedding } from '../embeddings';
 import { withSecurityGuardrail } from '../promptGuard';
@@ -14,31 +14,31 @@ export interface OpenAiConfig {
 }
 
 export interface LlmTaskParams {
-  reasoningEffort: ReasoningEffort;
+  /** undefined — параметр reasoning_effort в запрос не передаётся. */
+  reasoningEffort?: ReasoningEffort;
   temperature: number;
 }
 
-const DEFAULT_TASK_PARAMS: LlmTaskParams = { reasoningEffort: 'low', temperature: 0.1 };
-
 /**
  * Глубина рассуждений и температура по задаче.
- * audit — самая глубокая проверка; extract — средняя; anchor и прочие — быстрые.
- * consultant зависит от переключателя «Думать глубже» (thinking).
+ * audit, validate_answer, novelty — high; extract — medium;
+ * consultant — без размышлений, пока в input не включён thinking (тогда medium);
+ * anchor, navigator — быстрые, без размышлений.
  */
-export function resolveLlmParams(task: LlmTask, options: LlmCompleteOptions = {}): LlmTaskParams {
+export function resolveLlmParams(task: LlmTask, input?: unknown): LlmTaskParams {
   switch (task) {
     case 'audit':
+    case 'validate_answer':
+    case 'novelty':
       return { reasoningEffort: 'high', temperature: 0.1 };
     case 'extract':
       return { reasoningEffort: 'medium', temperature: 0.1 };
-    case 'anchor':
-      return { reasoningEffort: 'low', temperature: 0.1 };
     case 'consultant':
-      return options.thinking === true
-        ? { reasoningEffort: 'high', temperature: 0.2 }
-        : { reasoningEffort: 'low', temperature: 0.3 };
+      return Boolean((input as Record<string, unknown> | null | undefined)?.thinking) === true
+        ? { reasoningEffort: 'medium', temperature: 0.3 }
+        : { reasoningEffort: undefined, temperature: 0.3 };
     default:
-      return DEFAULT_TASK_PARAMS;
+      return { reasoningEffort: undefined, temperature: 0.1 };
   }
 }
 
@@ -52,14 +52,14 @@ export class OpenAiClient implements LlmClient {
     this.fetchImpl = cfg.fetchImpl;
   }
 
-  async complete(task: LlmTask, input: unknown, options: LlmCompleteOptions = {}): Promise<unknown> {
-    const { reasoningEffort, temperature } = resolveLlmParams(task, options);
+  async complete(task: LlmTask, input: unknown): Promise<unknown> {
+    const { reasoningEffort, temperature } = resolveLlmParams(task, input);
 
     if (this.fetchImpl) {
       const res = await this.post('/chat/completions', {
         model: this.cfg.chatModel ?? this.model,
         temperature,
-        reasoning_effort: reasoningEffort,
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: withSecurityGuardrail(SYSTEM_PROMPTS[task]) },

@@ -6,8 +6,8 @@ export const chatPostRequestSchema = z
     message: z.string().trim().min(1).max(4000),
     active_section_id: z.number().int().min(1).max(10).nullish(),
     program: z.string().min(1).max(100).default('Студенческий стартап'),
-    /** Режим «Думать глубже»: повышает reasoning_effort для ответа консультанта. */
-    thinking: z.boolean().optional(),
+    /** Режим «Думать глубже»: включает reasoning_effort 'medium' для ответа консультанта. */
+    thinking: z.boolean().optional().default(false),
   })
   .strict();
 

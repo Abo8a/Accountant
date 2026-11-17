@@ -16,7 +16,7 @@ export interface LLMCallOptions {
 }
 
 /** Таймаут одного HTTP-вызова модели и число повторов SDK на 429/5xx/сетевые сбои. */
-const LLM_TIMEOUT_MS = 60_000;
+const LLM_TIMEOUT_MS = 120_000;
 const LLM_MAX_RETRIES = 2;
 /** Сколько раз пробовать, если модель вернула пустой или битый JSON (сеть — отдельно, см. maxRetries). */
 const JSON_ATTEMPTS = 3;
