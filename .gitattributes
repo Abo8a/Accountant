@@ -1,0 +1,2 @@
+# Скрипты, которые исполняются на Linux-сервере, всегда с LF: CRLF из Windows ломает bash.
+*.sh text eol=lf

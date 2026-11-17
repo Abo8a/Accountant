@@ -1,0 +1,17 @@
+# Сервер без GHCR: образы собираются на самом сервере из исходников клона.
+# Поверх docker-compose.yml. Наружу публикуется только Caddy (80/443), остальные порты закрываются.
+#   docker compose -f docker-compose.yml -f docker-compose.server.yml --profile prod up -d --build --wait
+# Используется deploy/deploy.sh.
+
+services:
+  postgres:
+    ports: !reset []
+
+  parser:
+    ports: !reset []
+
+  pipeline:
+    ports: !reset []
+
+  frontend:
+    ports: !reset []
