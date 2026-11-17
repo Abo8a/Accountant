@@ -1,0 +1,194 @@
+name: passport-constructor
+
+# Все настраиваемые значения берутся из .env (шаблон — .env.example). Здесь остаётся только устройство стека:
+# имена сервисов внутри сети, внутренние порты контейнеров и пути внутри образов — их менять не нужно.
+#
+# Запуск:
+#   docker compose up -d --build                    # локально, без Caddy
+#   docker compose --profile stub up -d --build     # локально, с заглушкой LLM (OPENAI_BASE_URL=http://stub-llm:8090/v1)
+#   docker compose --profile prod up -d --wait      # на сервере: Caddy с SSL и защитой админки (см. docker-compose.prod.yml)
+#
+# Миграции: db-migrate выполняется один раз и пропускает уже созданную схему (см. migrate-cli.ts).
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${LOG_MAX_SIZE:?}
+    max-file: ${LOG_MAX_FILE:?}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+    ports:
+      - "${POSTGRES_HOST_PORT:?}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # имитация Supabase (схема auth, роли anon/authenticated) — выполняется при первой инициализации
+      - ./backend/supabase/local:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          cpus: ${CPU_POSTGRES:?}
+          memory: ${MEM_POSTGRES:?}
+    logging: *logging
+
+  db-migrate:
+    # Контекст — корень репозитория: Dockerfile копирует workspace-манифесты и packages/.
+    build:
+      context: .
+      dockerfile: backend/pipeline-api/Dockerfile
+    command: ["npx", "tsx", "src/db/migrate-cli.ts"]
+    env_file: .env
+    environment:
+      SUPABASE_DB_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+      DEV_SEED: ${DEV_SEED:?}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: ${CPU_DBMIGRATE:?}
+          memory: ${MEM_DBMIGRATE:?}
+    logging: *logging
+
+  parser:
+    build: ./backend/parser-service
+    restart: unless-stopped
+    ports:
+      - "${PARSER_HOST_PORT:?}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: ${CPU_PARSER:?}
+          memory: ${MEM_PARSER:?}
+    logging: *logging
+
+  stub-llm:
+    image: node:22-slim
+    profiles: ["stub"]
+    working_dir: /srv
+    command: ["node", "server.mjs"]
+    environment:
+      PORT: "8090"
+    volumes:
+      - ./backend/stub-llm:/srv:ro
+    ports:
+      - "${STUB_LLM_HOST_PORT:?}:8090"
+    logging: *logging
+
+  pipeline:
+    build:
+      context: .
+      dockerfile: backend/pipeline-api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      SUPABASE_DB_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+      PARSER_URL: http://parser:8000
+      OUTBOX_DIR: /srv/backend/pipeline-api/outbox
+      # Путь к манифесту внутри образа (COPY backend/kb).
+      KB_MANIFEST_PATH: /srv/backend/kb/programs/student-startup/manifest.json
+      # Кучу Node держим под лимит контейнера: иначе V8 раздувается до лимита и контейнер убивается OOM.
+      NODE_OPTIONS: --max-old-space-size=${NODE_HEAP_MB:?}
+    ports:
+      - "${PIPELINE_HOST_PORT:?}:8080"
+    volumes:
+      - ./backend/pipeline-api/outbox:/srv/backend/pipeline-api/outbox
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      parser:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: ${CPU_PIPELINE:?}
+          memory: ${MEM_PIPELINE:?}
+    logging: *logging
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_PIPELINE_URL: ${VITE_PIPELINE_URL:?}
+        VITE_SUPPORT_ENDPOINT: ${VITE_SUPPORT_ENDPOINT:?}
+        VITE_AUTH_ENDPOINT: ${VITE_AUTH_ENDPOINT:?}
+        VITE_CHAT_ENDPOINT: ${VITE_CHAT_ENDPOINT:?}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_HOST_PORT:?}:80"
+    # nginx резолвит pipeline:8080 при старте, поэтому ждём, пока API ответит по healthcheck.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    depends_on:
+      pipeline:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: ${CPU_FRONTEND:?}
+          memory: ${MEM_FRONTEND:?}
+    logging: *logging
+
+  # Обратный прокси: SSL (Let's Encrypt) и basic auth на /admin-panel. Только в профиле prod.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["prod"]
+    restart: unless-stopped
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?}
+      ACME_EMAIL: ${ACME_EMAIL:?}
+      ADMIN_BASIC_USER: ${ADMIN_BASIC_USER:?}
+      ADMIN_BASIC_PASSWORD_HASH: ${ADMIN_BASIC_PASSWORD_HASH:?}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: ${CPU_CADDY:?}
+          memory: ${MEM_CADDY:?}
+    logging: *logging
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
