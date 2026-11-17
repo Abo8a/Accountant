@@ -368,6 +368,47 @@ describe('Этап 4: Комплексный аудит на Kimi, дельта-
   });
 
   // ---------------------------------------------------------------------------
+  // Тест 4а: Страховка от ложного approved
+  // ---------------------------------------------------------------------------
+  it('Тест 4а: модель вернула approved, но с failed_fields или непустым remark → блок принудительно needs_review', async () => {
+    const userId = await createUser(db.sql, { name: 'Ирина Страховая' });
+    const projectId = await db.store.ensureProject(userId);
+
+    await db.store.upsertField(projectId, 3, 'problem_description', 'Студенты очных отделений тратят до 3 часов на поиск попутчиков.');
+    await db.store.upsertField(projectId, 3, 'target_audience', 'Студенты вузов РФ очной формы обучения.');
+    await db.store.upsertField(projectId, 2, 'team_members', 'Иванов Иван — руководитель проекта, отвечает за разработку.');
+    await db.store.upsertField(projectId, 2, 'competencies_and_experience', 'Опыт разработки мобильных приложений 3 года.');
+
+    const llm = new FakeLlm({
+      audit: () => ({
+        fatal_stop_factors: [],
+        block_audits: [
+          // approved, но проблемное поле перечислено в failed_fields
+          { section_id: 3, status: 'approved', remark: null, how_to_fix: null, failed_fields: ['problem_description'] },
+          // approved, но модель написала текст замечания; failed_fields пуст
+          { section_id: 2, status: 'approved', remark: 'Не указана конкретная роль второго участника.', how_to_fix: null, failed_fields: [] },
+        ],
+        budget_audit: { status: 'not_provided', remark: null, how_to_fix: null },
+      }),
+    });
+
+    const report = await auditPassport(makeDeps(db, llm), projectId);
+
+    const audit3 = report.block_audits.find((b) => b.section_id === 3);
+    const audit2 = report.block_audits.find((b) => b.section_id === 2);
+    expect(audit3?.status).toBe('needs_review');
+    expect(audit3?.failed_fields).toContain('problem_description');
+    expect(audit2?.status).toBe('needs_review');
+    expect(audit2?.remark).toBe('Не указана конкретная роль второго участника.');
+
+    const records = await db.store.getRecords(projectId);
+    const rec3 = records.find((r) => r.section_id === 3 && r.field_key === 'problem_description');
+    const rec2 = records.find((r) => r.section_id === 2 && r.field_key === 'team_members');
+    expect(rec3?.review_status).toBe('needs_review');
+    expect(rec2?.review_status).toBe('needs_review');
+  });
+
+  // ---------------------------------------------------------------------------
   // Тест 5: Детерминированный Шаг 8 (0 вызовов navigator в LLM)
   // ---------------------------------------------------------------------------
   it('Тест 5: Детерминированный Шаг 8 (0 вызовов navigator в LLM, summary и чек-лист формируются кодом с правилами 8-й очереди и откреплёнными ЭП)', async () => {

@@ -182,7 +182,9 @@ export async function handleConsultantChat(
   };
 
   // Вызов LLM (DeepSeek Flash)
-  const out = await callLlm(deps.llm, 'consultant', payload, consultantSchema);
+  const out = await callLlm(deps.llm, 'consultant', payload, consultantSchema, {
+    thinking: req.thinking === true,
+  });
 
   // Сохраняем ответ ассистента в БД
   const assistantMsgRow = await deps.store.insertChatMessage({

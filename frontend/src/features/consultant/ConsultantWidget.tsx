@@ -22,6 +22,7 @@ export function ConsultantWidget({ activeSectionId, userId }: ConsultantWidgetPr
   const [isSending, setIsSending] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [thinking, setThinking] = useState(false);
 
   const feedEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -96,6 +97,7 @@ export function ConsultantWidget({ activeSectionId, userId }: ConsultantWidgetPr
         userId,
         message: trimmed,
         activeSectionId,
+        thinking,
       });
 
       if (resp && resp.history && resp.history.length > 0) {
@@ -256,6 +258,19 @@ export function ConsultantWidget({ activeSectionId, userId }: ConsultantWidgetPr
             disabled={isSending}
           />
           <div className="consultant-form__footer">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={thinking}
+              className={`consultant-toggle${thinking ? ' consultant-toggle--on' : ''}`}
+              disabled={isSending}
+              onClick={() => setThinking((v) => !v)}
+            >
+              <span className="consultant-toggle__track" aria-hidden="true">
+                <span className="consultant-toggle__thumb" />
+              </span>
+              Думать глубже
+            </button>
             <button
               type="submit"
               className="consultant-btn-submit"

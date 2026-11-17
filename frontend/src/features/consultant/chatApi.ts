@@ -1,5 +1,6 @@
 import { env } from '../../shared/config/env';
 import type {
+  ConsultantChatRequest,
   ConsultantChatResponse,
   ConsultantHistoryResponse,
 } from '@passport/contracts';
@@ -24,11 +25,13 @@ export async function sendChatMessage(params: {
   userId?: string;
   message: string;
   activeSectionId?: number;
+  thinking?: boolean;
 }): Promise<ConsultantChatResponse> {
-  const payload = {
+  const payload: ConsultantChatRequest = {
     user_id: params.userId || env.defaultUserId,
     message: params.message,
     ...(params.activeSectionId !== undefined ? { active_section_id: params.activeSectionId } : {}),
+    thinking: params.thinking === true,
   };
 
   const res = await fetch(env.chatEndpoint, {

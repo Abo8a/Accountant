@@ -307,4 +307,38 @@ describe('Этап 5 (Задача 4.1): Сквозной модуль ИИ-Ко
     expect(data.assistant_message.content).toContain('250 000');
     expect(data.assistant_message.referenced_cards.length).toBeGreaterThan(0);
   });
+
+  // ---------------------------------------------------------------------------
+  // Тест 5: Флаг thinking («Думать глубже»)
+  // ---------------------------------------------------------------------------
+  it('Тест 5: флаг thinking передаётся в LLM (по умолчанию false) и валидируется схемой', async () => {
+    const userId = await createUser(db.sql, { name: 'Глеб Глубокий' });
+    const consultantCalls = () => llm.calls.filter((c) => c.task === 'consultant');
+    const post = (message: string, extra: Record<string, unknown>) =>
+      fetch(`${base}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, message, ...extra }),
+      });
+    // Вызов консультанта по маркеру в вопросе (запросы идут параллельно: RAG ходит в сеть)
+    const callFor = (marker: string) => consultantCalls().filter((c) => String(c.input?.question).includes(marker));
+
+    const [resDefault, resFalse, resTrue] = await Promise.all([
+      post('thinking-marker-default', {}),
+      post('thinking-marker-false', { thinking: false }),
+      post('thinking-marker-true', { thinking: true }),
+    ]);
+    expect([resDefault.status, resFalse.status, resTrue.status]).toEqual([200, 200, 200]);
+
+    // Без поля thinking и с thinking: false → false; с thinking: true → true
+    expect(callFor('thinking-marker-default')).toHaveLength(1);
+    expect(callFor('thinking-marker-default')[0].options?.thinking).toBe(false);
+    expect(callFor('thinking-marker-false')[0].options?.thinking).toBe(false);
+    expect(callFor('thinking-marker-true')[0].options?.thinking).toBe(true);
+
+    // Не boolean → 400, LLM не вызывается
+    const bad = await post('thinking-marker-bad', { thinking: 'yes' });
+    expect(bad.status).toBe(400);
+    expect(callFor('thinking-marker-bad')).toHaveLength(0);
+  });
 });

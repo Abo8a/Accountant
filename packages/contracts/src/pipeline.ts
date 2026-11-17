@@ -200,6 +200,8 @@ export interface ConsultantChatRequest {
   message: string;
   active_section_id?: number;
   program?: string;
+  /** Режим «Думать глубже»: по умолчанию выключен (false). */
+  thinking?: boolean;
 }
 
 export interface ConsultantChatResponse {

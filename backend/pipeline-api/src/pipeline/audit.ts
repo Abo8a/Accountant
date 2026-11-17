@@ -263,6 +263,9 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
       !isFatal &&
       !hasMismatch &&
       kimiAudit?.status === 'approved' &&
+      // Страховка от ложного approved: модель одобрила, но оставила проблемные поля или текст замечания
+      (kimiAudit?.failed_fields?.length ?? 0) === 0 &&
+      !kimiAudit?.remark?.trim() &&
       noveltyPassed;
 
     if (canApprove) {

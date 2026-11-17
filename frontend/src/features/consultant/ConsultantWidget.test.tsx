@@ -208,6 +208,53 @@ describe('ConsultantWidget: рендер, взаимодействие и API', 
     expect(screen.getByRole('button', { name: 'Скопировано ✓' })).toBeInTheDocument();
   });
 
+  it('переключатель «Думать глубже» по умолчанию выключен, а POST /chat уходит с thinking: false', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: 'OK', project_id: 'p1', messages: [] }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify(mockPostResponse), { status: 200 }));
+
+    const user = userEvent.setup();
+    render(<ConsultantWidget />);
+    await user.click(screen.getByRole('button', { name: 'Открыть чат с ИИ-Консультантом' }));
+
+    const toggle = screen.getByRole('switch', { name: 'Думать глубже' });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+    await user.type(screen.getByRole('textbox', { name: 'Вопрос ИИ-Консультанту' }), 'Новый тестовый вопрос');
+    await user.click(screen.getByRole('button', { name: 'Отправить в чат' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).thinking).toBe(false);
+  });
+
+  it('после включения «Думать глубже» POST /chat уходит с thinking: true, повторный клик выключает режим', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: 'OK', project_id: 'p1', messages: [] }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify(mockPostResponse), { status: 200 }));
+
+    const user = userEvent.setup();
+    render(<ConsultantWidget />);
+    await user.click(screen.getByRole('button', { name: 'Открыть чат с ИИ-Консультантом' }));
+
+    const toggle = screen.getByRole('switch', { name: 'Думать глубже' });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+
+    await user.type(screen.getByRole('textbox', { name: 'Вопрос ИИ-Консультанту' }), 'Новый тестовый вопрос');
+    await user.click(screen.getByRole('button', { name: 'Отправить в чат' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).thinking).toBe(true);
+  });
+
   it('кнопка «Закрыть консультант» закрывает диалог', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ status: 'OK', project_id: 'p1', messages: [] }), {

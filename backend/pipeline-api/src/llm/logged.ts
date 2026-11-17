@@ -1,6 +1,6 @@
 // Журнал обращений к нейросети (задача 4.4): каждый вызов → строка в llm_call_log.
 // Ошибка записи в журнал не должна ломать пайплайн: её глотаем.
-import type { LlmClient, LlmTask } from './types';
+import type { LlmClient, LlmCompleteOptions, LlmTask } from './types';
 
 export interface LlmLogEntry {
   user_id: string | null;
@@ -35,10 +35,10 @@ export class LoggedLlm implements LlmClient {
     return this.inner.model;
   }
 
-  async complete(task: LlmTask, input: unknown): Promise<unknown> {
+  async complete(task: LlmTask, input: unknown, options?: LlmCompleteOptions): Promise<unknown> {
     const started = Date.now();
     try {
-      const out = await this.inner.complete(task, input);
+      const out = await this.inner.complete(task, input, options);
       await this.write({ task, status: 'ok', duration_ms: Date.now() - started, response_preview: preview(out) });
       return out;
     } catch (err) {

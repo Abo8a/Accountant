@@ -2,10 +2,14 @@ import OpenAI from 'openai';
 import { config } from './config';
 import { withSecurityGuardrail } from './promptGuard';
 
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+
 export interface LLMCallOptions {
   systemPrompt: string;
   userPrompt: string;
   temperature?: number;
+  /** Глубина рассуждений модели; уходит в запрос как reasoning_effort. */
+  reasoningEffort?: ReasoningEffort;
   jsonMode?: boolean;
   thinking?: boolean;
   maxTokens?: number;
@@ -162,6 +166,7 @@ async function invokeOnce(
       model,
       messages,
       temperature,
+      ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
       ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
       ...(isJson ? { response_format: { type: 'json_object' } } : {}),
     });

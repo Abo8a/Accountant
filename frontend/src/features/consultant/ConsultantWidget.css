@@ -307,7 +307,75 @@
 
 .consultant-form__footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+/* Переключатель режима «Думать глубже» (по умолчанию выключен) */
+.consultant-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-12);
+  background-color: var(--color-white);
+  border: 1px solid var(--color-gray-300);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  font-weight: var(--font-medium);
+  color: var(--color-gray-600);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.consultant-toggle:hover:not(:disabled) {
+  border-color: var(--color-ink);
+  color: var(--color-ink);
+}
+
+.consultant-toggle:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.consultant-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.consultant-toggle__track {
+  position: relative;
+  width: 28px;
+  height: var(--size-swatch);
+  background-color: var(--color-gray-300);
+  border-radius: var(--radius-pill);
+  transition: background-color 0.15s ease;
+}
+
+.consultant-toggle__thumb {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  width: var(--size-mark);
+  height: var(--size-mark);
+  background-color: var(--color-white);
+  border-radius: 50%;
+  transition: transform 0.15s ease;
+}
+
+.consultant-toggle--on {
+  background-color: var(--color-peach);
+  border-color: var(--color-brand);
+  color: var(--color-ink);
+}
+
+.consultant-toggle--on .consultant-toggle__track {
+  background-color: var(--color-brand);
+}
+
+.consultant-toggle--on .consultant-toggle__thumb {
+  transform: translateX(14px);
 }
 
 .consultant-btn-submit {

@@ -1,7 +1,7 @@
 import { PipelineFailure } from '../errors';
 import { SYSTEM_PROMPTS } from './prompts';
-import type { LlmClient, LlmTask } from './types';
-import { callDeepSeek, callKimi, cleanLLMJsonOutput } from '../llm';
+import type { LlmClient, LlmCompleteOptions, LlmTask } from './types';
+import { callDeepSeek, callKimi, cleanLLMJsonOutput, type ReasoningEffort } from '../llm';
 import { getEmbedding } from '../embeddings';
 import { withSecurityGuardrail } from '../promptGuard';
 
@@ -11,6 +11,35 @@ export interface OpenAiConfig {
   chatModel?: string;
   embeddingModel?: string;
   fetchImpl?: typeof fetch;
+}
+
+export interface LlmTaskParams {
+  reasoningEffort: ReasoningEffort;
+  temperature: number;
+}
+
+const DEFAULT_TASK_PARAMS: LlmTaskParams = { reasoningEffort: 'low', temperature: 0.1 };
+
+/**
+ * Глубина рассуждений и температура по задаче.
+ * audit — самая глубокая проверка; extract — средняя; anchor и прочие — быстрые.
+ * consultant зависит от переключателя «Думать глубже» (thinking).
+ */
+export function resolveLlmParams(task: LlmTask, options: LlmCompleteOptions = {}): LlmTaskParams {
+  switch (task) {
+    case 'audit':
+      return { reasoningEffort: 'high', temperature: 0.1 };
+    case 'extract':
+      return { reasoningEffort: 'medium', temperature: 0.1 };
+    case 'anchor':
+      return { reasoningEffort: 'low', temperature: 0.1 };
+    case 'consultant':
+      return options.thinking === true
+        ? { reasoningEffort: 'high', temperature: 0.2 }
+        : { reasoningEffort: 'low', temperature: 0.3 };
+    default:
+      return DEFAULT_TASK_PARAMS;
+  }
 }
 
 /** OpenAI-совместимый клиент с маршрутизацией по 3 независимым каналам. */
@@ -23,11 +52,14 @@ export class OpenAiClient implements LlmClient {
     this.fetchImpl = cfg.fetchImpl;
   }
 
-  async complete(task: LlmTask, input: unknown): Promise<unknown> {
+  async complete(task: LlmTask, input: unknown, options: LlmCompleteOptions = {}): Promise<unknown> {
+    const { reasoningEffort, temperature } = resolveLlmParams(task, options);
+
     if (this.fetchImpl) {
       const res = await this.post('/chat/completions', {
         model: this.cfg.chatModel ?? this.model,
-        temperature: 0,
+        temperature,
+        reasoning_effort: reasoningEffort,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: withSecurityGuardrail(SYSTEM_PROMPTS[task]) },
@@ -45,15 +77,16 @@ export class OpenAiClient implements LlmClient {
 
     const systemPrompt = SYSTEM_PROMPTS[task];
     const userPrompt = typeof input === 'string' ? input : JSON.stringify(input);
+    const callOptions = { systemPrompt, userPrompt, temperature, reasoningEffort };
 
     try {
       // Канал 2 (Kimi Code): Шаг 6 (Первичный аудит и точечный ре-аудит, валидация ответа)
       if (task === 'audit' || task === 'validate_answer') {
-        return await callKimi({ systemPrompt, userPrompt });
+        return await callKimi(callOptions);
       }
 
       // Канал 1 (OpenCode Go - DeepSeek): 'anchor', 'extract', 'novelty', 'consultant' (и 'navigator' для обратной совместимости)
-      return await callDeepSeek({ systemPrompt, userPrompt });
+      return await callDeepSeek(callOptions);
     } catch (err: any) {
       throw new PipelineFailure('INTERNAL', `LLM (${task}): ${err?.message ?? err}`);
     }

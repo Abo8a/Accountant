@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { cleanLLMJsonOutput } from '../src/llm';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanLLMJsonOutput, deepseekClient, kimiClient } from '../src/llm';
+import { OpenAiClient, resolveLlmParams } from '../src/llm/openai';
 import { wrapUntrustedData, withSecurityGuardrail, SECURITY_GUARDRAIL } from '../src/promptGuard';
 import { EMBEDDING_DIM } from '../src/llm/types';
 import { hashEmbedding } from '../src/llm/fake';
@@ -52,6 +53,84 @@ describe('функция cleanLLMJsonOutput', () => {
   it('извлекает JSON при наличии окружающего пояснительного текста', () => {
     const raw = 'Вот сгенерированный результат:\n```json\n{"success": true}\n```\nНадеюсь, помог!';
     expect(cleanLLMJsonOutput(raw)).toBe('{"success": true}');
+  });
+});
+
+describe('reasoning_effort и temperature по задачам', () => {
+  const EXPECTED = {
+    audit: { reasoningEffort: 'high', temperature: 0.1 },
+    extract: { reasoningEffort: 'medium', temperature: 0.1 },
+    anchor: { reasoningEffort: 'low', temperature: 0.1 },
+    consultantOff: { reasoningEffort: 'low', temperature: 0.3 },
+    consultantOn: { reasoningEffort: 'high', temperature: 0.2 },
+  } as const;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('resolveLlmParams: значения для audit, extract, anchor и consultant (thinking выкл./вкл.)', () => {
+    expect(resolveLlmParams('audit')).toEqual(EXPECTED.audit);
+    expect(resolveLlmParams('extract')).toEqual(EXPECTED.extract);
+    expect(resolveLlmParams('anchor')).toEqual(EXPECTED.anchor);
+    expect(resolveLlmParams('consultant')).toEqual(EXPECTED.consultantOff);
+    expect(resolveLlmParams('consultant', { thinking: false })).toEqual(EXPECTED.consultantOff);
+    expect(resolveLlmParams('consultant', { thinking: true })).toEqual(EXPECTED.consultantOn);
+  });
+
+  it('thinking не влияет на задачи, кроме consultant', () => {
+    expect(resolveLlmParams('audit', { thinking: true })).toEqual(EXPECTED.audit);
+    expect(resolveLlmParams('extract', { thinking: true })).toEqual(EXPECTED.extract);
+    expect(resolveLlmParams('anchor', { thinking: true })).toEqual(EXPECTED.anchor);
+  });
+
+  it('OpenAiClient (fetch): в тело запроса уходят reasoning_effort и temperature', async () => {
+    const bodies: any[] = [];
+    const fetchImpl = (async (_url: string, init: any) => {
+      bodies.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const client = new OpenAiClient({ baseUrl: 'http://llm.test', fetchImpl });
+
+    await client.complete('audit', {});
+    await client.complete('extract', {});
+    await client.complete('anchor', {});
+    await client.complete('consultant', {});
+    await client.complete('consultant', {}, { thinking: false });
+    await client.complete('consultant', {}, { thinking: true });
+
+    const pick = (b: any) => ({ reasoningEffort: b.reasoning_effort, temperature: b.temperature });
+    expect(bodies.map(pick)).toEqual([
+      EXPECTED.audit,
+      EXPECTED.extract,
+      EXPECTED.anchor,
+      EXPECTED.consultantOff,
+      EXPECTED.consultantOff,
+      EXPECTED.consultantOn,
+    ]);
+  });
+
+  it('OpenAiClient (SDK): audit уходит в Kimi, остальные задачи — в DeepSeek, с reasoning_effort', async () => {
+    const reply = { choices: [{ message: { content: '{"ok":true}' } }] } as any;
+    const kimiSpy = vi.spyOn(kimiClient.chat.completions, 'create').mockResolvedValue(reply);
+    const deepseekSpy = vi.spyOn(deepseekClient.chat.completions, 'create').mockResolvedValue(reply);
+    const client = new OpenAiClient();
+
+    await client.complete('audit', {});
+    expect(kimiSpy).toHaveBeenCalledTimes(1);
+    expect(kimiSpy.mock.calls[0][0]).toMatchObject({ reasoning_effort: 'high', temperature: 0.1 });
+
+    await client.complete('extract', {});
+    await client.complete('anchor', {});
+    await client.complete('consultant', {}, { thinking: false });
+    await client.complete('consultant', {}, { thinking: true });
+
+    expect(deepseekSpy).toHaveBeenCalledTimes(4);
+    const sent = deepseekSpy.mock.calls.map(([body]) => ({
+      reasoningEffort: (body as any).reasoning_effort,
+      temperature: (body as any).temperature,
+    }));
+    expect(sent).toEqual([EXPECTED.extract, EXPECTED.anchor, EXPECTED.consultantOff, EXPECTED.consultantOn]);
   });
 });
 
