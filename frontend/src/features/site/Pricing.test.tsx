@@ -77,4 +77,12 @@ describe('Pricing (тарифы)', () => {
     renderPricing();
     expect(screen.queryByText('© 2026 Буха. Независимый сервис, не связан с ФСИ.')).not.toBeInTheDocument();
   });
+
+  it('без подзаголовка и нижних карточек про оплату, срок и проект', () => {
+    renderPricing();
+    expect(screen.queryByText('Начните бесплатно. Платный доступ нужен, чтобы Буха разобрала ваши документы и проверила новизну.')).not.toBeInTheDocument();
+    for (const name of ['Оплата через ЮKassa', '30 дней доступа', 'Один аккаунт — один проект']) {
+      expect(screen.queryByRole('heading', { name })).not.toBeInTheDocument();
+    }
+  });
 });

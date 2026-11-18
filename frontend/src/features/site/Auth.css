@@ -43,12 +43,6 @@
   gap: var(--space-8);
 }
 
-.auth__lead {
-  font-size: var(--fs-17);
-  line-height: 1.5;
-  color: var(--color-gray-600);
-}
-
 /* Поля ввода: подпись 15/600, поле 56 px с рамкой gray-300 и радиусом 16 */
 .auth__field {
   display: flex;

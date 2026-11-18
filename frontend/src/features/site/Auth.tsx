@@ -56,7 +56,6 @@ function SignupForm() {
     <div className="auth__stack">
       <div className="auth__heading">
         <h1 className="t-screen-title">Создайте аккаунт</h1>
-        <p className="auth__lead">Один аккаунт — один проект. Начать можно бесплатно.</p>
       </div>
       <Field id="su-email" label="Электронная почта" type="email" placeholder="name@university.ru" />
       <Field id="su-pass" label="Пароль" type="password" placeholder="Не меньше 8 символов" />
@@ -67,7 +66,6 @@ function SignupForm() {
         </span>
       </label>
       <PillLink to="/onboarding" variant="brand" size="md">Зарегистрироваться</PillLink>
-      <p className="auth__hint">Пришлём письмо для подтверждения почты.</p>
     </div>
   );
 }
@@ -115,7 +113,6 @@ export function Auth() {
             <div className="auth__stack" key={mode}>
               <div className="auth__heading">
                 <h1 className="t-screen-title">{mode === 'signup' ? 'Создайте аккаунт' : 'С возвращением'}</h1>
-                {mode === 'signup' && <p className="auth__lead">Один аккаунт — один проект. Начать можно бесплатно.</p>}
               </div>
               <CodeLogin
                 purpose="user"

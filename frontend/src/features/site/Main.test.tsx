@@ -30,7 +30,16 @@ const location = () => screen.getByTestId('location').textContent;
 describe('Main (лендинг)', () => {
   it('рендерит заголовок экрана из дизайна', () => {
     renderSite('/');
-    expect(screen.getByRole('heading', { level: 1, name: 'Соберите паспорт проекта для гранта. Без приукрашивания' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Сервис быстрого описания проекта для грантов' })).toBeInTheDocument();
+  });
+
+  it('первый экран и шаги говорят о паспорте по шаблону и требованиям фонда', () => {
+    renderSite('/');
+    expect(screen.getByText('Расскажите идею или загрузите презентацию. Буха соберёт паспорт проекта по шаблону и требованиям фонда — в том виде, в котором его подают на конкурс. Найдёт пробелы и покажет, что мешает допуску.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Строго по шаблону фонда' })).toBeInTheDocument();
+    expect(screen.getByText('Паспорт проекта в DOCX и PDF, оформленный по шаблону и требованиям ФСИ, проверка на стоп-факторы и чек-лист документов.')).toBeInTheDocument();
+    expect(screen.queryByText('Для команд, которые идут на «Студенческий стартап» ФСИ')).not.toBeInTheDocument();
+    expect(screen.queryByText('Факт, план или гипотеза')).not.toBeInTheDocument();
   });
 
   it('рендерит ключевые заголовки секций дизайна', () => {
@@ -38,13 +47,13 @@ describe('Main (лендинг)', () => {
     for (const name of [
       'Как это работает',
       'Эксперт фонда заметит приукрашивание. Буха — раньше',
-      '10 блоков паспорта',
       'Тарифы',
       'Вопросы',
       'Начните с того, что уже есть',
     ]) {
       expect(screen.getByRole('heading', { level: 2, name })).toBeInTheDocument();
     }
+    expect(screen.queryByRole('heading', { name: '10 блоков паспорта' })).not.toBeInTheDocument();
   });
 
   it('CTA «Собрать паспорт бесплатно» есть дважды и ведёт на /auth', async () => {
@@ -73,19 +82,46 @@ describe('Main (лендинг)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Создайте аккаунт' })).toBeInTheDocument();
   });
 
-  it('«Посмотреть тарифы» и «Сравнить все возможности» ведут на /pricing', () => {
+  it('«Посмотреть тарифы» и «Подробнее о тарифах» ведут на /pricing', () => {
     renderSite('/');
     expect(screen.getByRole('link', { name: 'Посмотреть тарифы' })).toHaveAttribute('href', '/pricing');
-    expect(screen.getByRole('link', { name: 'Сравнить все возможности' })).toHaveAttribute('href', '/pricing');
+    expect(screen.getByRole('link', { name: 'Подробнее о тарифах' })).toHaveAttribute('href', '/pricing');
   });
 
-  it('три тарифа с ценами из дизайна', () => {
+  it('три полные карточки тарифов, как на странице тарифов', () => {
     renderSite('/');
-    expect(screen.getByRole('heading', { level: 3, name: 'Базовый' })).toBeInTheDocument();
+    for (const name of ['Базовый', 'Профессиональный', 'Премиум']) {
+      expect(screen.getByRole('heading', { level: 3, name })).toBeInTheDocument();
+    }
     expect(screen.getByText('0 ₽')).toBeInTheDocument();
-    expect(screen.getByText('990 ₽ за 30 дней')).toBeInTheDocument();
-    expect(screen.getByText('4 990 ₽ за 30 дней')).toBeInTheDocument();
+    expect(screen.getByText('990 ₽')).toBeInTheDocument();
+    expect(screen.getByText('4 990 ₽')).toBeInTheDocument();
     expect(screen.getByText('Рекомендуем')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Начать бесплатно' })).toHaveAttribute('href', '/auth');
+    expect(screen.getByRole('link', { name: 'Выбрать Профессиональный' })).toHaveAttribute('href', '/auth');
+    expect(screen.getByRole('link', { name: 'Выбрать Премиум' })).toHaveAttribute('href', '/auth');
+  });
+
+  it('переключатель «Продление» на лендинге пересчитывает цены', async () => {
+    renderSite('/');
+    const toggle = screen.getByRole('group', { name: 'Период оплаты' });
+    await userEvent.click(within(toggle).getByRole('button', { name: 'Продление' }));
+    expect(screen.getByText('841 ₽')).toBeInTheDocument();
+    expect(screen.getByText('4 491 ₽')).toBeInTheDocument();
+    expect(screen.getByText('Скидка 15% при продлении')).toBeInTheDocument();
+    expect(screen.getByText('Скидка 10% при продлении')).toBeInTheDocument();
+  });
+
+  it('блок «Эксперт фонда»: фрагмент паспорта с тремя цветами и три пункта', () => {
+    renderSite('/');
+    expect(screen.getByText('Блок 7 · Фрагмент паспорта')).toBeInTheDocument();
+    for (const label of ['Подтверждено документом', 'Без документа', 'План или гипотеза']) {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    }
+    for (const name of ['Видно, что доказано, а что — слова', 'ИИ не дописывает достижения', 'Новизна — минимум два аналога']) {
+      expect(screen.getByRole('heading', { level: 3, name })).toBeInTheDocument();
+    }
+    expect(screen.queryByText('Поправили текст — связи пересчитаются')).not.toBeInTheDocument();
   });
 
   it('пять вопросов FAQ, каждый — раскрывающийся блок', () => {

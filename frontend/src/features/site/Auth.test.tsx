@@ -40,7 +40,8 @@ describe('Auth (вход и регистрация)', () => {
     expect(screen.getByLabelText('Электронная почта')).toHaveAttribute('placeholder', 'name@university.ru');
     expect(screen.getByLabelText('Пароль')).toHaveAttribute('placeholder', 'Не меньше 8 символов');
     expect(screen.getByRole('checkbox')).toBeChecked();
-    expect(screen.getByText('Один аккаунт — один проект. Начать можно бесплатно.')).toBeInTheDocument();
+    expect(screen.queryByText('Один аккаунт — один проект. Начать можно бесплатно.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Пришлём письмо для подтверждения почты.')).not.toBeInTheDocument();
   });
 
   it('«Зарегистрироваться» ведёт на онбординг', async () => {

@@ -1,0 +1,111 @@
+/* Карточки тарифов. Значения — из inline-стилей design/project/Pricing.dc.html (те же карточки стоят на лендинге).
+   Размеры без токена (30, 44 px) указаны прямо — см. отчёт G1. Цвет #A1A1AA — токен --color-gray-400. */
+
+.plans {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-20);
+  align-items: stretch;
+}
+
+.plans__card {
+  position: relative;
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-xl);
+  padding: var(--space-40);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-20);
+}
+
+.plans__card--featured {
+  border: 2px solid var(--color-brand);
+  background: var(--color-peach-soft);
+}
+
+.plans__badge {
+  position: absolute;
+  top: -15px;
+  left: 40px;
+  background: var(--color-brand);
+  color: var(--color-ink);
+  font-size: var(--fs-14);
+  font-weight: var(--font-bold);
+  padding: 5px var(--space-14);
+  border-radius: var(--radius-pill);
+}
+
+.plans__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.plans__name {
+  font-size: 30px;
+  font-weight: var(--font-bold);
+}
+
+.plans__desc {
+  font-size: var(--fs-17);
+  line-height: 1.5;
+  color: var(--color-gray-600);
+}
+
+.plans__price {
+  font-size: 44px;
+  font-weight: var(--font-extrabold);
+  letter-spacing: var(--tracking-title);
+}
+
+.plans__price-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+}
+
+.plans__period {
+  font-size: var(--fs-17);
+  color: var(--color-gray-600);
+}
+
+.plans__discount {
+  align-self: flex-start;
+  font-size: var(--fs-14);
+  font-weight: var(--font-semibold);
+  padding: var(--space-4) var(--space-10);
+  border-radius: var(--radius-pill);
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.plans__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14);
+  font-size: var(--fs-17);
+  line-height: 1.4;
+}
+
+.plans__item {
+  display: flex;
+  gap: var(--space-12);
+}
+
+.plans__item--off {
+  color: var(--color-gray-500);
+}
+
+/* Без flex: none: как в эталоне, иконка сжимается, когда строка пункта длинная. */
+.plans__icon {
+  stroke: var(--color-fact-doc-line);
+}
+
+.plans__icon--off {
+  stroke: var(--color-gray-400);
+}
+
+.plans__cta {
+  margin-top: auto;
+}
