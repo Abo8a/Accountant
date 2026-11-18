@@ -81,10 +81,12 @@ describe('LiveGaps (живые пробелы)', () => {
     expect(screen.getByRole('link', { name: 'Перейти к паспорту' })).toBeInTheDocument();
   });
 
-  it('«Не знаю — помогите» подсказывает спросить ИИ-Консультанта про этот вопрос', async () => {
+  it('«Не знаю — помогите» открывает ИИ-Консультанта', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
     renderGaps(GAP);
+    expect(screen.queryByRole('dialog', { name: 'ИИ-Консультант по гранту ФСИ' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Не знаю — помогите' }));
-    expect(screen.getByText('Спросите ИИ-Консультанта: «Кто целевые пользователи?»')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'ИИ-Консультант по гранту ФСИ' })).toBeInTheDocument();
   });
 
   it('на живом экране доступен ИИ-Консультант', () => {

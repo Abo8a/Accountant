@@ -24,23 +24,11 @@
   flex-wrap: wrap;
 }
 
-.result__head-left {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-}
-
 .result__title {
   margin: 0;
   font-size: var(--fs-40);
   font-weight: var(--font-extrabold);
   letter-spacing: var(--tracking-title);
-}
-
-.result__meta {
-  margin: 0;
-  font-size: var(--fs-16);
-  color: var(--color-gray-600);
 }
 
 .result__switch {
@@ -125,6 +113,11 @@
   color: var(--color-white);
 }
 
+/* «Тема не подходит программе»: значок темнее, чем у стоп-факторов. */
+.result__hero-icon--fatal {
+  background: var(--color-danger-deep);
+}
+
 .result__hero-text {
   flex: 1 1 420px; /* локальное значение: ширина текста вердикта из эталона */
   display: flex;
@@ -194,98 +187,6 @@
   gap: var(--space-16);
 }
 
-.result__panel-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--space-12);
-}
-
-.result__panel-title {
-  margin: 0;
-  font-size: var(--fs-22);
-  font-weight: var(--font-bold);
-}
-
-.result__panel-note {
-  font-size: var(--fs-14);
-  color: var(--color-gray-600);
-}
-
-.result__ok-line {
-  margin: 0;
-  display: flex;
-  gap: var(--space-10);
-  align-items: center;
-  font-size: var(--fs-16);
-  color: var(--color-success-text);
-}
-
-.result__ok-line svg {
-  color: var(--color-fact-doc-line);
-}
-
-.result__list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-10);
-}
-
-.result__item {
-  display: flex;
-  gap: var(--space-14);
-  align-items: flex-start;
-  padding: var(--space-16) var(--space-18);
-  border-radius: var(--radius-input);
-}
-
-.result__item--stop {
-  background: var(--color-danger-soft);
-}
-
-.result__item--warn {
-  background: var(--color-warning-soft);
-}
-
-.result__dot {
-  flex: none;
-  margin-top: var(--space-6);
-  width: var(--size-mark);
-  height: var(--size-mark);
-  border-radius: var(--radius-pill);
-}
-
-.result__dot--stop {
-  background: var(--color-lost-text);
-}
-
-.result__dot--warn {
-  background: var(--color-amber-600);
-}
-
-.result__item-text {
-  flex: 1;
-  font-size: var(--fs-16);
-  line-height: var(--lh-text);
-}
-
-.result__item-text--stop {
-  color: var(--color-danger-deep);
-}
-
-.result__item-text--warn {
-  color: var(--color-warning-deep);
-}
-
-.result__item-link {
-  flex: none;
-  font-size: var(--fs-15);
-  font-weight: var(--font-semibold);
-}
-
 /* Чек-лист */
 
 .result__panel--checklist {
@@ -317,13 +218,6 @@
   color: var(--color-gray-600);
 }
 
-.result__check-lead {
-  margin: 0;
-  font-size: var(--fs-16);
-  line-height: var(--lh-body);
-  color: var(--color-gray-800);
-}
-
 .result__checks {
   margin: 0;
   padding: 0;
@@ -336,25 +230,86 @@
 .result__check {
   display: flex;
   gap: var(--space-14);
-  align-items: center;
+  align-items: flex-start;
   padding: var(--space-14) var(--space-16);
   background: var(--color-white);
   border-radius: var(--radius-input);
 }
 
+/* Стоп-фактор: строка на розовой подложке. */
+.result__check--stop {
+  background: var(--color-danger-soft);
+}
+
+.result__check-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.result__tag {
+  align-self: flex-start;
+  font-size: var(--fs-13);
+  font-weight: var(--font-semibold);
+  padding: 3px var(--space-10);
+  border-radius: var(--radius-pill);
+}
+
+.result__tag--stop {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.result__tag--audit {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.result__check-fix {
+  font-size: var(--fs-15);
+  line-height: 1.5;
+  color: var(--color-gray-800);
+}
+
+/* «Всё готово»: список пуст. */
+.result__all-done {
+  margin: 0;
+  display: flex;
+  gap: var(--space-10);
+  align-items: center;
+  padding: var(--space-14) var(--space-16);
+  background: var(--color-white);
+  border-radius: var(--radius-input);
+  font-size: var(--fs-16);
+  font-weight: var(--font-semibold);
+  color: var(--color-success-text);
+}
+
+.result__all-done svg,
+.result__ready svg {
+  flex: none;
+  stroke: var(--color-fact-doc-line);
+}
+
 .result__checkbox {
   flex: none;
-  width: var(--size-checkbox-sm);
-  height: var(--size-checkbox-sm);
-  margin: 0;
+  width: 22px;
+  height: 22px;
+  margin: 2px 0 0;
   accent-color: var(--color-brand);
 }
 
 .result__check-text {
-  flex: 1;
   font-size: var(--fs-15);
   line-height: var(--lh-compact);
   color: var(--color-gray-900);
+}
+
+.result__check-text--stop {
+  color: var(--color-danger-deep);
+  font-weight: var(--font-medium);
 }
 
 .result__check-text--done {
@@ -404,14 +359,6 @@
   background: var(--color-blue-500);
 }
 
-.result__seg--hypothesis {
-  background: var(--color-hypothesis-line);
-}
-
-.result__seg--hearsay {
-  background: var(--color-gray-400);
-}
-
 .result__legend {
   margin: 0;
   padding: 0;
@@ -446,14 +393,6 @@
   background: var(--color-blue-500);
 }
 
-.result__swatch--hypothesis {
-  background: var(--color-hypothesis-line);
-}
-
-.result__swatch--hearsay {
-  background: var(--color-gray-400);
-}
-
 .result__legend-name {
   flex: 1;
 }
@@ -482,36 +421,6 @@
   color: var(--color-gray-600);
 }
 
-.result__approve {
-  min-height: var(--control-h-action);
-  border: 0;
-  background: var(--color-brand);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-sans);
-  font-size: var(--fs-16);
-  font-weight: var(--font-bold);
-  color: var(--color-ink);
-  cursor: pointer;
-}
-
-.result__approved {
-  margin: 0;
-  display: flex;
-  gap: var(--space-10);
-  align-items: center;
-  padding: var(--space-14) var(--space-16);
-  background: var(--color-success-soft);
-  border-radius: var(--radius-s);
-  font-size: var(--fs-15);
-  font-weight: var(--font-semibold);
-  color: var(--color-success-text);
-}
-
-.result__approved svg {
-  flex: none;
-  color: var(--color-fact-doc-line);
-}
-
 .result__downloads {
   display: flex;
   gap: var(--space-10);
@@ -531,11 +440,26 @@
   cursor: pointer;
 }
 
-/* Недоступно до одобрения всех блоков. */
+/* Недоступно, пока не закрыт список «Что сделать перед подачей». */
 .result__download:disabled {
-  color: var(--color-gray-500);
-  border-color: var(--color-gray-300);
+  color: var(--color-gray-400);
+  border-color: var(--color-gray-200);
+  background: var(--color-gray-100);
   cursor: not-allowed;
+}
+
+/* Всё одобрено: зелёная плашка над кнопками скачивания. */
+.result__ready {
+  margin: 0;
+  display: flex;
+  gap: var(--space-10);
+  align-items: center;
+  padding: var(--space-14) var(--space-16);
+  background: var(--color-success-soft);
+  border-radius: var(--radius-s);
+  font-size: var(--fs-15);
+  font-weight: var(--font-semibold);
+  color: var(--color-success-text);
 }
 
 /* Ошибка скачивания паспорта (нет в эталоне: оформлена токенами опасности). */

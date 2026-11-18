@@ -24,7 +24,6 @@ import { RequireSession } from '../shared/auth/RequireSession';
 import { env } from '../shared/config/env';
 import { DesignSystem } from '../features/design-system/DesignSystem';
 import { Support } from '../features/support/Support';
-import { Eligibility } from '../features/eligibility/Eligibility';
 
 // Оболочка маршрута: none — без бокового меню; cabinet — меню кабинета; admin — меню админки.
 export type RouteShell = 'none' | 'cabinet' | 'admin';
@@ -46,11 +45,10 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/pricing', shell: 'none', element: <Pricing />, title: 'Буха — тарифы' },
   { path: '/auth', shell: 'none', element: <Auth />, title: 'Буха — вход и регистрация' },
   { path: '/onboarding', shell: 'none', element: <Onboarding />, title: 'Буха — профиль основателя' },
-  { path: '/eligibility', shell: 'none', element: <Eligibility />, title: 'Буха — проверка допуска' },
   { path: '/brief', shell: 'none', element: <Brief />, title: 'Буха — стартовый бриф' },
   { path: '/generating', shell: 'none', element: <Generating />, title: 'Буха — сборка паспорта' },
   { path: '/gaps', shell: 'cabinet', element: <Gaps />, title: 'Буха — пробелы и новизна' },
-  { path: '/result', shell: 'cabinet', element: <Result />, title: 'Буха — итог проверки' },
+  { path: '/result', shell: 'cabinet', element: <Result />, title: 'Буха — итог' },
   { path: '/passport', shell: 'cabinet', element: <Passport />, title: 'Буха — паспорт проекта' },
   { path: '/files', shell: 'cabinet', element: <Files />, title: 'Буха — материалы проекта' },
   { path: '/billing', shell: 'cabinet', element: <Billing />, title: 'Буха — тариф и оплата' },
@@ -75,7 +73,7 @@ export function AppRoutes() {
   }, [current]);
 
   // Маршруты, где нужен вход (живой режим): кабинет и шаги регистрации после входа.
-  const SESSION_FLOW = new Set(['/onboarding', '/eligibility', '/brief', '/generating']);
+  const SESSION_FLOW = new Set(['/onboarding', '/brief', '/generating']);
   const guardFlow = (r: AppRoute) => (env.liveApi && SESSION_FLOW.has(r.path) ? <RequireSession>{r.element}</RequireSession> : r.element);
 
   return (

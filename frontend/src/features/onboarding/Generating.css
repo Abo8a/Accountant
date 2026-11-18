@@ -189,13 +189,6 @@
   stroke: var(--color-avatar-bg);
 }
 
-.gen-step__text {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
 .gen-step__title {
   font-size: var(--fs-17);
   font-weight: var(--font-semibold);
@@ -203,11 +196,6 @@
 }
 
 .gen-step__title--pending {
-  color: var(--color-gray-500);
-}
-
-.gen-step__sub {
-  font-size: var(--fs-14);
   color: var(--color-gray-500);
 }
 
@@ -240,7 +228,7 @@
 
 .gen-claims__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--space-10);
 }
 
@@ -291,18 +279,6 @@
   border-style: dotted;
 }
 
-.gen-swatch--hypothesis {
-  background: var(--color-hypothesis-bg);
-  border-color: var(--color-hypothesis-strong);
-  border-style: solid;
-}
-
-.gen-swatch--hearsay {
-  background: var(--color-hearsay-bg);
-  border-color: var(--color-gray-600);
-  border-style: dashed;
-}
-
 /* Кнопка прототипа в шапке: показать / убрать ошибку. */
 .gen-proto {
   min-height: var(--control-h-sm);
@@ -313,4 +289,83 @@
   color: var(--color-gray-600);
   font: var(--font-medium) var(--fs-13) var(--font-sans);
   cursor: pointer;
+}
+
+/* Итог сборки плитками: две в ряд, третья — пробелы на тёплой подложке. */
+.gen-tiles {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-12);
+}
+
+.gen-tile-stat {
+  min-width: 0;
+  background: var(--color-gray-50);
+  border-radius: 20px;
+  padding: var(--space-18) var(--space-20);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+.gen-tile-stat--warn {
+  background: var(--color-warning-soft);
+}
+
+.gen-tile-stat__label {
+  font-size: var(--fs-15);
+  font-weight: var(--font-semibold);
+  color: var(--color-gray-800);
+}
+
+.gen-tile-stat__value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+}
+
+.gen-tile-stat__n {
+  font-size: 36px;
+  font-weight: var(--font-extrabold);
+  line-height: 1;
+}
+
+.gen-tile-stat__n--ok {
+  color: var(--color-fact-doc-line);
+}
+
+.gen-tile-stat__n--warn {
+  color: var(--color-fact-nodoc-line);
+}
+
+.gen-tile-stat__of {
+  font-size: var(--fs-17);
+  color: var(--color-gray-600);
+}
+
+.gen-tile-stat__bar {
+  display: block;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-gray-200);
+  overflow: hidden;
+}
+
+.gen-tile-stat__fill {
+  display: block;
+  height: 100%;
+  background: var(--color-ink);
+  border-radius: var(--radius-pill);
+}
+
+.gen-tile-stat__fill--ok {
+  background: var(--color-fact-doc-line);
+}
+
+.gen-tile-stat__note {
+  font-size: var(--fs-14);
+  color: var(--color-warning-text);
 }

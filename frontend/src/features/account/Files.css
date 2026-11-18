@@ -363,13 +363,6 @@
   text-decoration: underline;
 }
 
-.files__hint {
-  margin: var(--space-4) 0 0;
-  font-size: var(--fs-14);
-  color: var(--color-gray-500);
-  line-height: var(--lh-text);
-}
-
 /* Оверлеи: просмотр и удаление. Перекрывают весь экран (fixed), как overlay эталона на всю страницу. */
 
 .files__overlay {

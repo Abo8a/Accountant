@@ -35,15 +35,6 @@
   letter-spacing: var(--tracking-title);
 }
 
-.profile__lead {
-  margin: 0;
-  font-size: var(--fs-17);
-  line-height: var(--lh-text);
-  color: var(--color-gray-600);
-  /* локальное значение: ширина подзаголовка 640px из эталона */
-  max-width: 640px;
-}
-
 .profile__edit {
   display: inline-flex;
   align-items: center;
@@ -146,19 +137,6 @@
 }
 
 /* Замок и пояснение: ФИО закреплено за проектом (F13) */
-.profile__lock {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-6);
-  color: var(--color-gray-600);
-  font-size: var(--fs-13);
-  font-weight: var(--font-semibold);
-  padding: var(--space-4) var(--space-10);
-  border-radius: var(--radius-pill);
-  background: var(--color-gray-100);
-  color: var(--color-gray-600);
-}
-
 .profile__meta {
   font-size: var(--fs-15);
   color: var(--color-gray-500);

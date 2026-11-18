@@ -9,23 +9,27 @@ import './Generating.css';
 const STEPS_TOTAL = 6;
 const STEP_INTERVAL_MS = 1800;
 
-const STEPS: { title: string; sub: string }[] = [
-  { title: 'Проверяем тариф и лимиты', sub: 'Профессиональный · 2 из 10 файлов' },
-  { title: 'Фиксируем якорь проекта', sub: 'Краткое описание сути для защиты от подмены' },
-  { title: 'Распознаём документы', sub: 'Monetrix_presentation_02.11.pdf · 15 страниц' },
-  { title: 'Раскладываем по блокам 2–10', sub: 'Каждое утверждение — с типом и источником' },
-  { title: 'Сверяем цитаты и даты', sub: 'Будущие даты не могут быть фактами' },
-  { title: 'Ищем пробелы', sub: 'Сверяем с обязательными полями программы' },
+const STEPS = [
+  'Проверяем тариф и лимиты',
+  'Распознаём документы',
+  'Раскладываем по блокам 2–10',
+  'Фиксируем якорь проекта',
+  'Проводим аудит',
+  'Ищем пробелы',
 ];
 
-// Утверждения по типам: максимум в конце сборки, сейчас масштабируются по шагу.
-const CLAIM_TYPES: { kind: 'doc' | 'nodoc' | 'plan' | 'hypothesis' | 'hearsay'; label: string; max: number }[] = [
-  { kind: 'doc', label: 'Факт с документом', max: 6 },
-  { kind: 'nodoc', label: 'Факт без документа', max: 3 },
-  { kind: 'plan', label: 'План', max: 5 },
-  { kind: 'hypothesis', label: 'Гипотеза', max: 2 },
-  { kind: 'hearsay', label: 'Со слов команды', max: 2 },
+// Утверждения по трём цветам: максимум в конце сборки, сейчас масштабируются по шагу.
+const CLAIM_TYPES: { kind: 'doc' | 'nodoc' | 'plan'; label: string; max: number }[] = [
+  { kind: 'doc', label: 'Подтверждено документом', max: 6 },
+  { kind: 'nodoc', label: 'Без документа', max: 5 },
+  { kind: 'plan', label: 'План или гипотеза', max: 7 },
 ];
+
+// Итог сборки плитками (эталон: 7 из 9 заполнено, 3 из 9 одобрено, 7 пробелов).
+const BLOCKS_TOTAL = 9;
+const BLOCKS_FILLED = 7;
+const BLOCKS_APPROVED = 3;
+const GAPS_LEFT = 7;
 
 export function Generating() {
   const [step, setStep] = useState(2);
@@ -72,14 +76,42 @@ export function Generating() {
           {!done && (
             <div className="gen-heading">
               <h1 className="ob-title ob-title--tight">Буха читает материалы</h1>
-              <p className="ob-lead">Обычно это занимает 2–4 минуты. Можно закрыть страницу — прогресс сохранится, а мы пришлём письмо.</p>
+              <p className="ob-lead">Обычно это занимает 2–4 минуты. Можно закрыть страницу — результат сохранится в кабинете.</p>
             </div>
           )}
 
           {done && (
             <div className="gen-heading gen-heading--done">
               <h1 className="ob-title ob-title--tight">Черновик паспорта готов</h1>
-              <p className="ob-lead">Заполнено 7 блоков из 9. Осталось ответить на 5 вопросов — без них паспорт не пройдёт проверку.</p>
+              <ul aria-label="Итог сборки" className="gen-tiles">
+                <li className="gen-tile-stat">
+                  <span className="gen-tile-stat__label">Заполнено блоков</span>
+                  <span className="gen-tile-stat__value">
+                    <b className="gen-tile-stat__n">{BLOCKS_FILLED}</b>
+                    <span className="gen-tile-stat__of">из {BLOCKS_TOTAL}</span>
+                  </span>
+                  <span aria-hidden="true" className="gen-tile-stat__bar">
+                    <span className="gen-tile-stat__fill" style={{ width: `${((BLOCKS_FILLED / BLOCKS_TOTAL) * 100).toFixed(1)}%` }} />
+                  </span>
+                </li>
+                <li className="gen-tile-stat">
+                  <span className="gen-tile-stat__label">Одобрено аудитом</span>
+                  <span className="gen-tile-stat__value">
+                    <b className="gen-tile-stat__n gen-tile-stat__n--ok">{BLOCKS_APPROVED}</b>
+                    <span className="gen-tile-stat__of">из {BLOCKS_TOTAL}</span>
+                  </span>
+                  <span aria-hidden="true" className="gen-tile-stat__bar">
+                    <span className="gen-tile-stat__fill gen-tile-stat__fill--ok" style={{ width: `${((BLOCKS_APPROVED / BLOCKS_TOTAL) * 100).toFixed(1)}%` }} />
+                  </span>
+                </li>
+                <li className="gen-tile-stat gen-tile-stat--warn">
+                  <span className="gen-tile-stat__label">Осталось пробелов</span>
+                  <span className="gen-tile-stat__value">
+                    <b className="gen-tile-stat__n gen-tile-stat__n--warn">{GAPS_LEFT}</b>
+                  </span>
+                  <span className="gen-tile-stat__note">включая направление и смету</span>
+                </li>
+              </ul>
               <div className="gen-actions">
                 <Link to="/gaps" className="gen-cta gen-cta--primary">
                   Ответить на вопросы
@@ -104,14 +136,14 @@ export function Generating() {
 
         <section className="gen-right">
           <ol aria-label="Этапы сборки" className="gen-steps">
-            {STEPS.map((item, index) => {
-              const isDone = index < step;
+            {STEPS.map((title, index) => {
+              const isDone = index < step && !(error && index === step);
               const isActive = index === step && !error;
               const isPending = !isDone && !isActive;
               const rowClass = `gen-step${isActive ? ' gen-step--active' : ''}`;
               const titleClass = `gen-step__title${isPending ? ' gen-step__title--pending' : ''}`;
               return (
-                <li key={item.title} className={rowClass}>
+                <li key={title} className={rowClass}>
                   {isDone && (
                     <span className="gen-step__icon gen-step__icon--done">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#15803D" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -128,10 +160,7 @@ export function Generating() {
                     </span>
                   )}
                   {isPending && <span className="gen-step__icon gen-step__icon--pending" />}
-                  <span className="gen-step__text">
-                    <span className={titleClass}>{item.title}</span>
-                    <span className="gen-step__sub">{item.sub}</span>
-                  </span>
+                  <span className={titleClass}>{title}</span>
                 </li>
               );
             })}

@@ -178,8 +178,7 @@ function GapsDemo() {
                 >
                   <span className={`gaps__dot gaps__dot--${dotMod}`} />
                   <span className="gaps__item-text">
-                    <span className="gaps__item-section">{g.section}</span>
-                    <span className="gaps__item-title">{g.title}</span>
+                    <span className="gaps__item-title">{`${g.section.split(' · ')[0]} · ${g.title}`}</span>
                     <span className="gaps__item-status">{status}</span>
                   </span>
                 </button>
@@ -244,7 +243,6 @@ function GapsDemo() {
                   <p className="gaps__claims">
                     <span className="gaps__claim gaps__claim--a">{cur.claimA}</span>. <span className="gaps__claim gaps__claim--b">{cur.claimB}</span>.
                   </p>
-                  <span className="gaps__accepted-note">Серым — со слов команды, без документа. Синим — план. Тип можно поменять в паспорте.</span>
                 </div>
               )}
 

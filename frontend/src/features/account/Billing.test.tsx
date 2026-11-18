@@ -49,13 +49,13 @@ describe('Billing: флаг HIDE_PAYMENT_GATEWAY = TRUE (по умолчанию
     expect(screen.getByText('Текущий тариф')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Премиум' })).toBeInTheDocument();
     expect(screen.getByText('Действует до 1 декабря 2026 · осталось 23 дня')).toBeInTheDocument();
-    expect(screen.getByText('Файлы: 3 из 50')).toBeInTheDocument();
-    expect(screen.getByText('Проверка новизны: включена')).toBeInTheDocument();
+    expect(screen.queryByText('Файлы: 3 из 50')).not.toBeInTheDocument();
+    expect(screen.queryByText('Проверка новизны: включена')).not.toBeInTheDocument();
   });
 
-  it('полоска использования файлов: 3 из 50 → 6%', () => {
+  it('в карточке тарифа нет счётчика файлов и полосы использования', () => {
     render(<Billing />);
-    expect(document.querySelector('.billing__bar-fill')).toHaveStyle({ width: '6%' });
+    expect(document.querySelector('.billing__bar-fill')).toBeNull();
   });
 
   it('текущий «Премиум»: кнопка блока и карточка Премиум — «Продлить» (без суммы)', () => {

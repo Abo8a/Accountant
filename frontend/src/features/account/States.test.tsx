@@ -17,12 +17,15 @@ describe('States', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Блокировки и лимиты' })).toBeInTheDocument();
   });
 
-  it('показывает пять состояний с подписями ответа сервера', () => {
+  it('показывает девять состояний с подписями ответа сервера', () => {
     renderStates();
     expect(screen.getByText('BLOCKED_PROJECT_SWAP · близость 0,38')).toBeInTheDocument();
     expect(screen.getByText('403 USER_BANNED')).toBeInTheDocument();
     expect(screen.getByText('402 PLAN_UPGRADE_REQUIRED')).toBeInTheDocument();
     expect(screen.getByText('429 FILE_QUOTA_EXCEEDED')).toBeInTheDocument();
+    for (const code of ['ALREADY_PROCESSING', 'NOT_APPROVED · кнопка «Скачать»', 'STALE_EXPORT', 'REJECTED · анкета допуска']) {
+      expect(screen.getByText(code)).toBeInTheDocument();
+    }
     expect(screen.getByText('Подписка закончилась · баннер в кабинете')).toBeInTheDocument();
   });
 
@@ -72,5 +75,13 @@ describe('States', () => {
     expect(within(paywall).getByText('На Базовом тарифе паспорт собирается по анкете. Чтобы разобрать презентацию и привязать факты к страницам, подключите «Профессиональный».')).toBeInTheDocument();
     const quota = screen.getByRole('dialog', { name: 'Лимит файлов исчерпан: 10 из 10' });
     expect(within(quota).getByText('Вы пытаетесь добавить ещё 2 файла. На «Премиуме» — до 50 файлов в проекте. Повторно загруженные копии в лимит не считаются.')).toBeInTheDocument();
+  });
+
+  it('отказ в допуске ведёт к причинам на шаге «Профиль» и в поддержку', () => {
+    renderStates();
+    const rejected = screen.getByRole('dialog', { name: 'Проект не проходит проверку допуска' });
+    expect(within(rejected).getByText('Отказ окончательный: проект закрыт для этого аккаунта. Причина и что с ней делать показаны на шаге «Профиль».')).toBeInTheDocument();
+    expect(within(rejected).getByRole('link', { name: 'Открыть причины' })).toHaveAttribute('href', '/onboarding');
+    expect(within(rejected).getByRole('link', { name: 'Написать в поддержку' })).toHaveAttribute('href', '/support');
   });
 });

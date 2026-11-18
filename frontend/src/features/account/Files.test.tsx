@@ -51,7 +51,8 @@ describe('Files', () => {
     expect(screen.getByText('Monetrix_presentation_02.11.pdf')).toBeInTheDocument();
     expect(screen.getByText('Svidetelstvo_RID_scan.pdf')).toBeInTheDocument();
     expect(screen.getByText('Biznes-plan_Monetrix.docx')).toBeInTheDocument();
-    expect(screen.getByText('Скан распознан · 3 утверждения')).toBeInTheDocument();
+    expect(screen.getAllByText('3 утверждения').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Скан распознан/)).not.toBeInTheDocument();
     expect(screen.getByText('18 утверждений')).toBeInTheDocument();
   });
 

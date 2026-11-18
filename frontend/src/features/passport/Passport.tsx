@@ -184,29 +184,31 @@ const FOUNDER_ROWS: [string, string][] = [
   ['Контакты', 'ivan@university.ru'],
 ];
 
+// Три цвета утверждений: слова команды показываются как «Без документа», гипотезы — вместе с планами.
 const LEGEND: { kind: string; label: string }[] = [
-  { kind: 'fact-doc', label: 'Факт с документом' },
-  { kind: 'fact-nodoc', label: 'Факт без документа' },
-  { kind: 'plan', label: 'План' },
-  { kind: 'hyp', label: 'Гипотеза' },
-  { kind: 'hearsay', label: 'Со слов команды' },
+  { kind: 'fact-doc', label: 'Подтверждено документом' },
+  { kind: 'fact-nodoc', label: 'Без документа' },
+  { kind: 'plan', label: 'План или гипотеза' },
 ];
 
 const KIND_LABEL: Record<VisKind, string> = {
-  ok: 'Факт с документом',
-  nodoc: 'Факт без документа',
-  plan: 'План',
-  hyp: 'Гипотеза',
-  client: 'Со слов команды',
+  ok: 'Подтверждено документом',
+  nodoc: 'Без документа',
+  plan: 'План или гипотеза',
+  hyp: 'План или гипотеза',
+  client: 'Без документа',
 };
 
 const KIND_CLASS: Record<VisKind, string> = {
   ok: 'passport-claim--fact-doc',
   nodoc: 'passport-claim--fact-nodoc',
   plan: 'passport-claim--plan',
-  hyp: 'passport-claim--hyp',
-  client: 'passport-claim--hearsay',
+  hyp: 'passport-claim--plan',
+  client: 'passport-claim--fact-nodoc',
 };
+
+// Цвет плашки типа: слова команды — как «без документа», гипотеза — как план.
+const KIND_CHIP: Record<VisKind, VisKind> = { ok: 'ok', nodoc: 'nodoc', plan: 'plan', hyp: 'plan', client: 'nodoc' };
 
 // Факты без документа и «со слов» — риски: в режиме эксперта остаются видимыми.
 const RISKY: Record<VisKind, boolean> = { ok: false, nodoc: true, plan: false, hyp: false, client: true };
@@ -219,12 +221,13 @@ const ADVICE: Record<VisKind, string> = {
   ok: '',
 };
 
+// Две кнопки типа: «Факт» включает и слова команды, «План или гипотеза» — оба прогнозных типа.
 const TYPE_OPTIONS: [ClaimType, string][] = [
   ['fact', 'Факт'],
-  ['plan', 'План'],
-  ['hyp', 'Гипотеза'],
-  ['client', 'Со слов'],
+  ['plan', 'План или гипотеза'],
 ];
+
+const TYPE_GROUP: Record<ClaimType, ClaimType> = { fact: 'fact', client: 'fact', plan: 'plan', hyp: 'plan' };
 
 const FIELD_CHIP: Partial<Record<FieldStatus, { label: string; tone: PillTone }>> = {
   needs: { label: 'Нужна проверка', tone: 'warning' },
@@ -527,7 +530,7 @@ interface ClaimPanelProps {
 function ClaimPanel({ text, kind, type, source, page, quote, origin, conf, onPickType }: ClaimPanelProps) {
   return (
     <div className="passport__claim">
-      <span className={`passport__kind passport__kind--${kind}`}>{KIND_LABEL[kind]}</span>
+      <span className={`passport__kind passport__kind--${KIND_CHIP[kind]}`}>{KIND_LABEL[kind]}</span>
       {/* Строки собраны в один текстовый узел, как в эталоне: иначе «» шейпятся отдельно. */}
       <p className="passport__claim-text">{`«${text}»`}</p>
 
@@ -535,7 +538,7 @@ function ClaimPanel({ text, kind, type, source, page, quote, origin, conf, onPic
         <span className="passport__caption">Тип сведений</span>
         <div role="group" aria-label="Тип сведений" className="passport__types">
           {TYPE_OPTIONS.map(([id, label]) => {
-            const pressed = type === id;
+            const pressed = TYPE_GROUP[type] === id;
             return (
               <button
                 key={id}

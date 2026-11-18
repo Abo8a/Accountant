@@ -28,3 +28,20 @@
   color: var(--color-danger-text);
   font-size: var(--fs-14);
 }
+
+/* «Не знаю, какое выбрать — помогите»: ссылка под направлением, открывает ИИ-Консультанта (эталон Gaps.dc.html). */
+.dc-help {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: var(--control-h-nav);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: var(--font-semibold) var(--fs-17) var(--font-sans);
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}

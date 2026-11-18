@@ -77,7 +77,7 @@ describe('Gaps', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByText('Записано в паспорт')).toBeInTheDocument();
     expect(screen.getByText('В MVP версии 0.3 работают финансовый профиль и ручной ввод операций')).toBeInTheDocument();
-    expect(screen.getByText('Серым — со слов команды, без документа. Синим — план. Тип можно поменять в паспорте.')).toBeInTheDocument();
+    expect(screen.queryByText('Серым — со слов команды, без документа. Синим — план. Тип можно поменять в паспорте.')).not.toBeInTheDocument();
     expect(screen.getByText('Закрыто 3 из 5')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Отправить ответ' })).not.toBeInTheDocument();
 

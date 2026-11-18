@@ -29,7 +29,8 @@ export const PROFILE_DEMO: ProfileData = {
 
 const FOUNDER = {
   name: 'Иванов Иван Иванович',
-  contact: 'ivan@university.ru · аккаунт с 02.11.2026',
+  email: 'ivan@university.ru',
+  registered: 'Аккаунт зарегистрирован 02.11.2026',
   initials: 'ИИ',
 };
 
@@ -104,6 +105,7 @@ export function Profile({ initial = PROFILE_DEMO }: ProfileProps = {}) {
 
   const rows = [
     { label: 'Телефон', value: saved.phone || '—', color: 'var(--color-ink)' },
+    { label: 'Почта', value: FOUNDER.email, color: 'var(--color-ink)' },
     { label: 'Telegram', value: saved.telegram || '—', color: 'var(--color-ink)' },
     {
       label: 'Обучение',
@@ -120,7 +122,6 @@ export function Profile({ initial = PROFILE_DEMO }: ProfileProps = {}) {
       <header className="profile__head">
         <div className="profile__head-text">
           <h1 className="profile__title">Профиль</h1>
-          <p className="profile__lead">Данные основателя. Они попадают в блок 1 паспорта как есть: ИИ их не меняет.</p>
         </div>
         {!draft && (
           <button type="button" className="profile__edit" onClick={startEdit}>
@@ -153,15 +154,8 @@ export function Profile({ initial = PROFILE_DEMO }: ProfileProps = {}) {
           <div className="profile__founder-text">
             <span className="profile__name-row">
               <span className="profile__name">{FOUNDER.name}</span>
-              <span className="profile__lock">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                  <rect x="4" y="10" width="16" height="11" rx="2" />
-                  <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-                </svg>
-                закреплено за проектом
-              </span>
             </span>
-            <span className="profile__meta">{FOUNDER.contact}</span>
+            <span className="profile__meta">{FOUNDER.registered}</span>
           </div>
           <Link to="/support" className="profile__support">
             Ошибка в ФИО? Напишите в поддержку
@@ -350,7 +344,7 @@ export function Profile({ initial = PROFILE_DEMO }: ProfileProps = {}) {
         <div className="profile__info-card profile__info-card--muted">
           <span className="profile__info-caption">Программа</span>
           <span className="profile__info-title">Студенческий стартап</span>
-          <span className="profile__info-text">ФСИ · грант для студентов и аспирантов. «Старт-1» и Сколково появятся позже.</span>
+          <span className="profile__info-text">ФСИ · грант для студентов и аспирантов.</span>
         </div>
         <div className="profile__info-card profile__info-card--peach">
           <span className="profile__info-caption profile__info-caption--terracotta">Проект</span>

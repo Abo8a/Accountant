@@ -138,11 +138,6 @@
   text-align: left;
 }
 
-.gaps__item-section {
-  font-size: var(--fs-13);
-  color: var(--color-gray-500);
-}
-
 .gaps__item-title {
   font-size: var(--fs-16);
   font-weight: var(--font-semibold);
@@ -317,19 +312,15 @@
   padding: 1px var(--space-2);
 }
 
+/* Без документа — жёлтый (три цвета утверждений). */
 .gaps__claim--a {
-  background: var(--color-gray-100);
-  border-bottom: 2px dashed var(--color-gray-600);
+  background: var(--color-fact-nodoc-bg);
+  border-bottom: 2px dashed var(--color-fact-nodoc-line);
 }
 
 .gaps__claim--b {
   background: var(--color-plan-bg);
   border-bottom: 2px dotted var(--color-plan-line);
-}
-
-.gaps__accepted-note {
-  font-size: var(--fs-14);
-  color: var(--color-gray-600);
 }
 
 /* Действия */

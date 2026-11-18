@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import './States.css';
 
 // Экран «Блокировки и лимиты». Эталон: design/project/States.dc.html (без бокового меню, как в эталоне).
-// Все пять окон статичны: в эталоне нет скрипта состояний, каждое окно — отдельный ответ сервера.
+// Все окна статичны: в эталоне нет скрипта состояний, каждое окно — отдельный ответ сервера.
 
 interface StateBlockProps {
   /** Ответ сервера, как в эталоне (код или описание). */
@@ -97,6 +97,72 @@ export function States() {
               <div className="states__actions">
                 <Link to="/billing" className="states__btn-brand">Перейти на Премиум</Link>
                 <Link to="/files" className="states__btn-link">Выбрать меньше файлов</Link>
+              </div>
+            </div>
+          </StateBlock>
+
+          <StateBlock code="ALREADY_PROCESSING">
+            <div role="dialog" aria-labelledby="s5" className="states__dialog">
+              <span className="states__icon states__icon--brand">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+              </span>
+              <h2 id="s5" className="states__dialog-title">Паспорт уже собирается</h2>
+              <p className="states__text states__text--body">Буха ещё обрабатывает предыдущий запрос. Дождитесь результата — повторное нажатие ничего не ускорит. Если сборка зависла, через 10 минут её можно запустить заново.</p>
+              <div className="states__actions">
+                <Link to="/generating" className="states__btn-dark">Вернуться к сборке</Link>
+              </div>
+            </div>
+          </StateBlock>
+
+          <StateBlock code="NOT_APPROVED · кнопка «Скачать»">
+            <div role="dialog" aria-labelledby="s6" className="states__dialog">
+              <span className="states__icon states__icon--neutral">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="5" y="10" width="14" height="11" rx="2" />
+                  <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                </svg>
+              </span>
+              <h2 id="s6" className="states__dialog-title">Скачать пока нельзя</h2>
+              <p className="states__text states__text--body">Паспорт выгружается, когда аудит одобрил все блоки и смету. Сейчас на доработке: блок 6 «Аналоги», блок 9 «Права и РИД» и смета.</p>
+              <div className="states__actions">
+                <Link to="/gaps" className="states__btn-dark">Закрыть пробелы</Link>
+                <Link to="/result" className="states__btn-link">Итог проверки</Link>
+              </div>
+            </div>
+          </StateBlock>
+
+          <StateBlock code="STALE_EXPORT">
+            <div role="dialog" aria-labelledby="s7" className="states__dialog">
+              <span className="states__icon states__icon--warning">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3" />
+                  <path d="M18 3v4h-4M6 21v-4h4" />
+                </svg>
+              </span>
+              <h2 id="s7" className="states__dialog-title">Паспорт изменился после проверки</h2>
+              <p className="states__text states__text--body">Текст на экране отличается от одобренного аудитом. Документ не создан, чтобы в него не попали непроверенные данные. Запустите проверку заново и скачайте ещё раз.</p>
+              <div className="states__actions">
+                <Link to="/generating" className="states__btn-dark">Проверить заново</Link>
+              </div>
+            </div>
+          </StateBlock>
+
+          <StateBlock code="REJECTED · анкета допуска">
+            <div role="dialog" aria-labelledby="s8" className="states__dialog">
+              <span className="states__icon states__icon--danger">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M8 8l8 8M16 8l-8 8" />
+                </svg>
+              </span>
+              <h2 id="s8" className="states__dialog-title">Проект не проходит проверку допуска</h2>
+              <p className="states__text states__text--body">Отказ окончательный: проект закрыт для этого аккаунта. Причина и что с ней делать показаны на шаге «Профиль».</p>
+              <div className="states__actions">
+                <Link to="/onboarding" className="states__btn-dark">Открыть причины</Link>
+                <Link to="/support" className="states__btn-link">Написать в поддержку</Link>
               </div>
             </div>
           </StateBlock>

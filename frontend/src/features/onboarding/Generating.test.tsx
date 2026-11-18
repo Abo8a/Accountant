@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Generating } from './Generating';
@@ -44,25 +44,27 @@ describe('Generating', () => {
     expect(screen.getByText(/Обычно это занимает 2–4 минуты/)).toBeInTheDocument();
   });
 
-  it('стартует с третьего шага «Распознаём документы»; шаги 1–2 завершены', () => {
+  it('стартует с третьего шага «Раскладываем по блокам 2–10»; шаги 1–2 завершены', () => {
     renderGenerating();
-    expect(activeStepTitle()).toBe('Распознаём документы');
+    expect(activeStepTitle()).toBe('Раскладываем по блокам 2–10');
     expect(screen.getByText('Проверяем тариф и лимиты')).toBeInTheDocument();
     expect(screen.getByText('Ищем пробелы')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Найдено утверждений' })).toBeInTheDocument();
   });
 
-  it('счётчики утверждений на старте: всего 7', () => {
+  it('счётчики утверждений по трём цветам на старте: всего 6', () => {
     renderGenerating();
-    expect(screen.getByText('7')).toBeInTheDocument();
-    expect(screen.getByText('Факт с документом').nextElementSibling).toHaveTextContent('2');
-    expect(screen.getByText('Со слов команды').nextElementSibling).toHaveTextContent('1');
+    expect(screen.getByText('6')).toBeInTheDocument();
+    expect(screen.getByText('Подтверждено документом').nextElementSibling).toHaveTextContent('2');
+    expect(screen.getByText('Без документа').nextElementSibling).toHaveTextContent('2');
+    expect(screen.getByText('План или гипотеза').nextElementSibling).toHaveTextContent('2');
+    expect(screen.queryByText('Со слов команды')).not.toBeInTheDocument();
   });
 
   it('каждые 1800 мс шаг продвигается, счётчики растут', () => {
     renderGenerating();
     tick();
-    expect(activeStepTitle()).toBe('Раскладываем по блокам 2–10');
+    expect(activeStepTitle()).toBe('Фиксируем якорь проекта');
     expect(screen.getByText('10')).toBeInTheDocument();
   });
 
@@ -70,7 +72,11 @@ describe('Generating', () => {
     renderGenerating();
     tick(4);
     expect(screen.getByRole('heading', { level: 1, name: 'Черновик паспорта готов' })).toBeInTheDocument();
-    expect(screen.getByText('Заполнено 7 блоков из 9. Осталось ответить на 5 вопросов — без них паспорт не пройдёт проверку.')).toBeInTheDocument();
+    const tiles = screen.getByRole('list', { name: 'Итог сборки' });
+    expect(within(tiles).getByText('Заполнено блоков')).toBeInTheDocument();
+    expect(within(tiles).getByText('Одобрено аудитом')).toBeInTheDocument();
+    expect(within(tiles).getByText('Осталось пробелов')).toBeInTheDocument();
+    expect(within(tiles).getByText('включая направление и смету')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ответить на вопросы' })).toHaveAttribute('href', '/gaps');
     expect(screen.getByRole('link', { name: 'Сначала посмотреть паспорт' })).toHaveAttribute('href', '/passport');
     expect(screen.getByText('18')).toBeInTheDocument();
@@ -97,7 +103,7 @@ describe('Generating', () => {
       expect(activeStepTitle()).toBeNull();
 
       tick(3);
-      expect(screen.getByText('7')).toBeInTheDocument();
+      expect(screen.getByText('6')).toBeInTheDocument();
       expect(screen.queryByRole('heading', { name: 'Черновик паспорта готов' })).not.toBeInTheDocument();
     });
 
@@ -107,9 +113,9 @@ describe('Generating', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
 
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-      expect(activeStepTitle()).toBe('Распознаём документы');
-      tick();
       expect(activeStepTitle()).toBe('Раскладываем по блокам 2–10');
+      tick();
+      expect(activeStepTitle()).toBe('Фиксируем якорь проекта');
     });
   });
 });

@@ -1,20 +1,25 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import type { PipelineCompleted } from '@passport/contracts';
 import { BrandMark } from '../../shared/ui/Logo/Logo';
 import { env } from '../../shared/config/env';
-import { exportHintFromItems, exportReadyFromFlow, loadFlow, notApprovedFromFlow } from '../../shared/state/flow';
+import { loadFlow } from '../../shared/state/flow';
 import { downloadPassport } from '../../shared/api/exportSections';
 import './Result.css';
 
-// Экран «Итог проверки» (F8: допуск и чек-лист). Эталон: design/project/Result.dc.html.
-// Логика повторяет его скрипт: переключатель статуса прототипа, чек-лист, согласование паспорта.
+// Экран «Итог» (F8: допуск и чек-лист). Эталон: design/project/Result.dc.html.
+// Стоп-факторы, пункты, которые не одобрил аудит, и документы к подаче сведены в один список «Что сделать перед подачей»,
+// отсортированный по блокам. В живом режиме список и вердикт строятся из ответа пайплайна COMPLETED,
+// в демо — переключатель статуса прототипа, как в эталоне.
 
-type Verdict = 'ok' | 'warn' | 'bad';
+type Verdict = 'ok' | 'warn' | 'bad' | 'fatal';
+type TodoKind = 'stop' | 'audit';
 
 const VARIANTS: { id: Verdict; label: string }[] = [
   { id: 'ok', label: 'Допуск' },
   { id: 'warn', label: 'Уточнить' },
   { id: 'bad', label: 'Стоп' },
+  { id: 'fatal', label: 'Тема' },
 ];
 
 const HEROES: Record<Verdict, { title: string; text: string }> = {
@@ -30,55 +35,145 @@ const HEROES: Record<Verdict, { title: string; text: string }> = {
     title: 'Есть стоп-факторы',
     text: 'С текущими сведениями заявку не допустят к конкурсу. Исправьте пункты ниже и проверьте паспорт заново.',
   },
+  fatal: {
+    title: 'Тема не подходит программе',
+    text: 'Аудит нашёл причину, по которой ФСИ не поддержит проект в нынешнем виде. Это не исправить мелкими правками: нужно пересмотреть суть проекта.',
+  },
 };
 
-// Стоп-факторы видны только в варианте «Стоп».
-const STOPS = [
-  { text: 'Новизна не подтверждена: указан 1 аналог из 2, нет измеримого отличия.', block: 'Блок 6' },
-  { text: 'Правообладатель РИД не совпадает с заявителем, порядок передачи прав не указан.', block: 'Блок 9' },
-];
+const TAGS: Record<TodoKind, string> = {
+  stop: 'Стоп-фактор',
+  audit: 'Нужно доработать',
+};
 
-// Предупреждения видны в вариантах «Уточнить» и «Стоп».
-const WARNINGS = [
-  { text: 'Для «Студенческого стартапа» нужно подтвердить статус обучающегося.', block: 'Блок 1' },
-  { text: 'В паспорте 3 факта без подтверждающих документов.', block: 'Блоки 7, 10' },
-  { text: 'Проверка новизны пропущена после двух попыток.', block: 'Блок 6' },
-];
+interface TodoItem {
+  id: string;
+  /** Номер блока для сортировки; смета и пункты без блока — в конце. */
+  n: number;
+  block: string;
+  to: string;
+  text: string;
+  kind?: TodoKind;
+  fix?: string;
+}
 
-const CHECKLIST = [
-  { text: 'Загрузить справку об обучении в вузе', block: 'Блок 1' },
-  { text: 'Приложить материалы двух фокус-групп и подтверждение выручки 10 000 ₽', block: 'Блок 7' },
-  { text: 'Добавить второй аналог и способ измерить отличие', block: 'Блок 6' },
-  { text: 'Проверить совпадение заявителя и правообладателя по свидетельству РИД', block: 'Блок 9' },
-  { text: 'Приложить оригинал уведомления о статусе участника Сколково', block: 'Блок 10' },
-];
+// Пункты эталона для демо-режима.
+const POOL: Record<string, TodoItem> = {
+  study: { id: 'study', n: 1, block: 'Блок 1', to: '/passport', text: 'Загрузить справку об обучении в вузе — она подтверждает статус обучающегося' },
+  dir: { id: 'dir', n: 4, block: 'Блок 4', to: '/passport', kind: 'stop', text: 'Выбрать вызов из направления проекта: вызов № 189 относится к Н4, а выбрано Н1' },
+  fatal: {
+    id: 'fatal',
+    n: 4,
+    block: 'Блоки 4, 6',
+    to: '/passport',
+    kind: 'stop',
+    text: 'Нет научно-технической основы: проект описывает перепродажу и сервис без собственной разработки',
+    fix: 'ФСИ поддерживает только технологические проекты. Опишите, что именно команда разрабатывает и какую технологическую задачу решает.',
+  },
+  analog: { id: 'analog', n: 6, block: 'Блок 6', to: '/passport', kind: 'audit', text: 'Добавить второй аналог и способ измерить отличие' },
+  analogStop: { id: 'analogStop', n: 6, block: 'Блок 6', to: '/passport', kind: 'stop', text: 'Добавить второй аналог и способ измерить отличие: новизна не подтверждена' },
+  proof: { id: 'proof', n: 7, block: 'Блок 7', to: '/passport', text: 'Приложить материалы двух фокус-групп и подтверждение выручки 10 000 ₽' },
+  rid: { id: 'rid', n: 9, block: 'Блок 9', to: '/passport', kind: 'audit', text: 'Проверить совпадение заявителя и правообладателя по свидетельству РИД' },
+  sk: { id: 'sk', n: 10, block: 'Блок 10', to: '/passport', text: 'Приложить оригинал уведомления о статусе участника Сколково' },
+  budget: { id: 'budget', n: 99, block: 'Смета', to: '/gaps', kind: 'audit', text: 'Исправить смету по замечаниям аудита' },
+  budgetStop: { id: 'budgetStop', n: 99, block: 'Смета', to: '/gaps', kind: 'stop', text: 'Уменьшить расходы 1-го этапа: сейчас 25 000 ₽, лимит — 20 000 ₽' },
+};
 
-const LEGEND: { tone: string; label: string; count: number }[] = [
-  { tone: 'doc', label: 'Факты с документом', count: 6 },
-  { tone: 'nodoc', label: 'Факты без документа', count: 3 },
-  { tone: 'plan', label: 'Планы', count: 7 },
-  { tone: 'hypothesis', label: 'Гипотезы', count: 2 },
-  { tone: 'hearsay', label: 'Со слов команды', count: 4 },
-];
+const SETS: Record<Verdict, string[]> = {
+  ok: [],
+  warn: ['study', 'analog', 'proof', 'rid', 'sk', 'budget'],
+  bad: ['study', 'dir', 'analogStop', 'proof', 'rid', 'sk', 'budgetStop'],
+  fatal: ['fatal'],
+};
 
-// Доли полосы «Насколько паспорт подтверждён» — из inline-стилей эталона (flex: 6 / 3 / 7 / 2 / 4).
-const STACK = [
-  { tone: 'doc', flex: 6 },
-  { tone: 'nodoc', flex: 3 },
-  { tone: 'plan', flex: 7 },
-  { tone: 'hypothesis', flex: 2 },
-  { tone: 'hearsay', flex: 4 },
-];
+interface Confirmation {
+  doc: number;
+  nodoc: number;
+  plan: number;
+}
 
-const exportHint = 'Скачать можно, когда все 10 блоков одобрены';
+// Подтверждённость в демо — числа эталона.
+const DEMO_CONFIRMATION: Confirmation = { doc: 6, nodoc: 7, plan: 9 };
 
-/** exportReady — все блоки и смета одобрены аудитом (ответ COMPLETED.export_ready). По умолчанию — нет. */
+const byBlock = (a: TodoItem, b: TodoItem) => a.n - b.n;
+
+function blockLabel(sections: number[]): string {
+  const list = [...sections].sort((a, b) => a - b);
+  return list.length === 1 ? `Блок ${list[0]}` : `Блоки ${list.join(', ')}`;
+}
+
+/** Список «Что сделать перед подачей» из ответа COMPLETED: стоп-факторы, неодобренные блоки и смета, документы и предупреждения. */
+export function todoFromCompleted(res: PipelineCompleted): TodoItem[] {
+  const items: TodoItem[] = [];
+  (res.fatal_stop_factors ?? []).forEach((f, i) => {
+    const sections = f.affected_sections.length > 0 ? f.affected_sections : [4];
+    items.push({ id: `fatal-${i}`, n: Math.min(...sections), block: blockLabel(sections), to: '/passport', kind: 'stop', text: f.reason, fix: f.how_to_fix });
+  });
+  (res.block_audits ?? [])
+    .filter((a) => a.status === 'needs_review')
+    .forEach((a) => {
+      items.push({
+        id: `audit-${a.section_id}`,
+        n: a.section_id,
+        block: `Блок ${a.section_id}`,
+        to: '/passport',
+        kind: 'audit',
+        text: a.remark ?? `Доработать блок ${a.section_id} по замечаниям аудита`,
+        fix: a.how_to_fix ?? undefined,
+      });
+    });
+  if (res.budget_audit && res.budget_audit.status !== 'approved') {
+    items.push({
+      id: 'budget',
+      n: 99,
+      block: 'Смета',
+      to: '/gaps',
+      kind: 'audit',
+      text: res.budget_audit.remark ?? 'Исправить смету по замечаниям аудита',
+      fix: res.budget_audit.how_to_fix ?? undefined,
+    });
+  }
+  res.warnings.forEach((w, i) => items.push({ id: `warn-${i}`, n: 98, block: 'Паспорт', to: '/passport', text: w }));
+  res.checklist.forEach((c, i) => items.push({ id: `doc-${i}`, n: 98, block: 'Паспорт', to: '/passport', text: c }));
+  return items.sort(byBlock);
+}
+
+function verdictFromCompleted(res: PipelineCompleted): Verdict {
+  if ((res.fatal_stop_factors ?? []).length > 0) return 'fatal';
+  if (res.eligibility_status === 'NOT_ELIGIBLE') return 'bad';
+  if (res.eligibility_status === 'NEEDS_CLARIFICATION' || !res.export_ready) return 'warn';
+  return 'ok';
+}
+
+/** Утверждения паспорта по трём цветам: с документом, без документа (и слова команды), план или гипотеза. */
+function confirmationFromCompleted(res: PipelineCompleted): Confirmation {
+  const counts: Confirmation = { doc: 0, nodoc: 0, plan: 0 };
+  for (const field of res.passport) {
+    for (const claim of field.claims) {
+      if (claim.claim_type === 'plan' || claim.claim_type === 'hypothesis') counts.plan += 1;
+      else if (claim.claim_type === 'fact' && claim.source_id) counts.doc += 1;
+      else counts.nodoc += 1;
+    }
+  }
+  return counts;
+}
+
+/** exportReady — все блоки и смета одобрены аудитом (демо-режим). В живом режиме берётся из COMPLETED.export_ready. */
 export function Result({ exportReady = false }: { exportReady?: boolean } = {}) {
-  // В живом режиме готовность берём из ответа пайплайна (export_ready), в демо — из пропса.
-  const ready = env.liveApi ? exportReadyFromFlow() : exportReady;
-  // В живом режиме подсказка называет блоки, которые мешают скачать; в демо — общая фраза.
-  const hint = env.liveApi ? exportHintFromItems(notApprovedFromFlow(), exportHint) : exportHint;
+  const last = env.liveApi ? loadFlow().last : undefined;
+  const completed = last?.status === 'COMPLETED' ? last : undefined;
+
+  const [demoVerdict, setDemoVerdict] = useState<Verdict>('warn');
+  const [checks, setChecks] = useState<Record<string, boolean>>(env.liveApi ? {} : { study: true });
   const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const verdict = completed ? verdictFromCompleted(completed) : env.liveApi ? 'warn' : demoVerdict;
+  const items = completed ? todoFromCompleted(completed) : env.liveApi ? [] : SETS[demoVerdict].map((id) => POOL[id]).sort(byBlock);
+  const confirmation = completed ? confirmationFromCompleted(completed) : DEMO_CONFIRMATION;
+  const ready = completed ? completed.export_ready : env.liveApi ? false : demoVerdict === 'ok' || exportReady;
+  const hero = HEROES[verdict];
+  const doneCount = items.filter((t) => checks[t.id]).length;
+
   async function onDownloadDocx() {
     const flow = loadFlow();
     if (!flow.founder || flow.last?.status !== 'COMPLETED') {
@@ -87,53 +182,44 @@ export function Result({ exportReady = false }: { exportReady?: boolean } = {}) 
     }
     setDownloadError(await downloadPassport(flow.founder, flow.last.passport));
   }
-  const [verdict, setVerdict] = useState<Verdict>('warn');
-  const [approved, setApproved] = useState(false);
-  const [checks, setChecks] = useState<boolean[]>([true, false, false, false, false]);
 
-  const hero = HEROES[verdict];
-  const doneCount = checks.filter(Boolean).length;
-
-  function toggle(i: number) {
-    setChecks(checks.map((c, j) => (j === i ? !c : c)));
-  }
+  const heroIcon = verdict === 'bad' || verdict === 'fatal' ? 'bad' : verdict;
 
   return (
     <div className="result">
       <div className="result__head">
-        <div className="result__head-left">
-          <h1 className="result__title">Итог проверки</h1>
-          <p className="result__meta">«Студенческий стартап» · проверено 8 ноября 2026 в 14:20</p>
-        </div>
-        <div role="group" aria-label="Вариант статуса для прототипа" className="result__switch">
-          <span className="result__switch-label">Прототип:</span>
-          {VARIANTS.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              aria-pressed={verdict === v.id}
-              onClick={() => setVerdict(v.id)}
-              className={verdict === v.id ? 'result__variant result__variant--on' : 'result__variant'}
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
+        <h1 className="result__title">Итог</h1>
+        {!env.liveApi && (
+          <div role="group" aria-label="Вариант статуса для прототипа" className="result__switch">
+            <span className="result__switch-label">Прототип:</span>
+            {VARIANTS.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                aria-pressed={demoVerdict === v.id}
+                onClick={() => setDemoVerdict(v.id)}
+                className={demoVerdict === v.id ? 'result__variant result__variant--on' : 'result__variant'}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      <section className={`result__hero result__hero--${verdict}`}>
-        <span className={`result__hero-icon result__hero-icon--${verdict}`}>
-          {verdict === 'ok' && (
+      <section className={`result__hero result__hero--${heroIcon}`}>
+        <span className={`result__hero-icon result__hero-icon--${heroIcon}${verdict === 'fatal' ? ' result__hero-icon--fatal' : ''}`}>
+          {heroIcon === 'ok' && (
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M5 12l5 5 9-10" />
             </svg>
           )}
-          {verdict === 'warn' && (
+          {heroIcon === 'warn' && (
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" aria-hidden="true">
               <path d="M12 7v6M12 17h.01" />
             </svg>
           )}
-          {verdict === 'bad' && (
+          {heroIcon === 'bad' && (
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" aria-hidden="true">
               <path d="M7 7l10 10M17 7L7 17" />
             </svg>
@@ -148,71 +234,44 @@ export function Result({ exportReady = false }: { exportReady?: boolean } = {}) 
 
       <div className="result__grid">
         <div className="result__main">
-          <section className="result__panel">
-            <div className="result__panel-head">
-              <h2 className="result__panel-title">Стоп-факторы</h2>
-              <span className="result__panel-note">Блокируют подачу</span>
-            </div>
-            {verdict !== 'bad' && (
-              <p className="result__ok-line">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M5 12l5 5 9-10" />
-                </svg>
-                Формальных стоп-факторов не найдено
-              </p>
-            )}
-            <ul className="result__list">
-              {verdict === 'bad' && STOPS.map((s) => (
-                <li key={s.text} className="result__item result__item--stop">
-                  <span className="result__dot result__dot--stop" />
-                  <span className="result__item-text result__item-text--stop">{s.text}</span>
-                  <Link to="/passport" className="result__item-link">{s.block}</Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="result__panel">
-            <div className="result__panel-head">
-              <h2 className="result__panel-title">Предупреждения</h2>
-              <span className="result__panel-note">Не блокируют, но эксперт спросит</span>
-            </div>
-            <ul className="result__list">
-              {verdict !== 'ok' && WARNINGS.map((w) => (
-                <li key={w.text} className="result__item result__item--warn">
-                  <span className="result__dot result__dot--warn" />
-                  <span className="result__item-text result__item-text--warn">{w.text}</span>
-                  <Link to="/passport" className="result__item-link">{w.block}</Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="result__panel result__panel--checklist">
+          <section aria-labelledby="todo-title" className="result__panel result__panel--checklist">
             <div className="result__check-head">
               <BrandMark size={40} />
               <div className="result__check-head-text">
-                <h2 className="result__check-title">Что сделать перед подачей</h2>
-                <span className="result__check-count">Сделано {doneCount} из {CHECKLIST.length}</span>
+                <h2 id="todo-title" className="result__check-title">Что сделать перед подачей</h2>
+                {items.length > 0 && <span className="result__check-count">Сделано {doneCount} из {items.length}</span>}
               </div>
             </div>
-            <p className="result__check-lead">
-              Паспорт собран по всем блокам. Ключевые функции MVP и свидетельство на программу подтверждены презентацией. Для допуска нужны документы о статусе обучения и о заявленной выручке, а также сравнение со вторым аналогом.
-            </p>
+            {items.length === 0 && (
+              <p className="result__all-done">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 12l5 5 9-10" />
+                </svg>
+                Всё готово: стоп-факторов нет, блоки и смета одобрены аудитом
+              </p>
+            )}
             <ul className="result__checks">
-              {CHECKLIST.map((c, i) => (
-                <li key={c.text} className="result__check">
-                  <input
-                    type="checkbox"
-                    checked={checks[i]}
-                    onChange={() => toggle(i)}
-                    aria-label={c.text}
-                    className="result__checkbox"
-                  />
-                  <span className={checks[i] ? 'result__check-text result__check-text--done' : 'result__check-text'}>{c.text}</span>
-                  <Link to="/passport" className="result__check-link">{c.block}</Link>
-                </li>
-              ))}
+              {items.map((item) => {
+                const done = Boolean(checks[item.id]);
+                const textClass = ['result__check-text', done ? 'result__check-text--done' : item.kind === 'stop' ? 'result__check-text--stop' : ''].filter(Boolean).join(' ');
+                return (
+                  <li key={item.id} className={item.kind === 'stop' ? 'result__check result__check--stop' : 'result__check'}>
+                    <input
+                      type="checkbox"
+                      checked={done}
+                      onChange={() => setChecks({ ...checks, [item.id]: !done })}
+                      aria-label={item.text}
+                      className="result__checkbox"
+                    />
+                    <span className="result__check-body">
+                      {item.kind && <span className={`result__tag result__tag--${item.kind}`}>{TAGS[item.kind]}</span>}
+                      <span className={textClass}>{item.text}</span>
+                      {item.fix && <span className="result__check-fix">{item.fix}</span>}
+                    </span>
+                    <Link to={item.to} className="result__check-link">{item.block}</Link>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         </div>
@@ -221,42 +280,46 @@ export function Result({ exportReady = false }: { exportReady?: boolean } = {}) 
           <section className="result__panel result__panel--confirm">
             <h2 className="result__side-title">Насколько паспорт подтверждён</h2>
             <div aria-hidden="true" className="result__stack">
-              {STACK.map((s) => (
-                <span key={s.tone} className={`result__seg result__seg--${s.tone}`} style={{ flex: s.flex }} />
-              ))}
+              <span className="result__seg result__seg--doc" style={{ flex: confirmation.doc }} />
+              <span className="result__seg result__seg--nodoc" style={{ flex: confirmation.nodoc }} />
+              <span className="result__seg result__seg--plan" style={{ flex: confirmation.plan }} />
             </div>
             <ul className="result__legend">
-              {LEGEND.map((l) => (
-                <li key={l.tone} className="result__legend-item">
-                  <span className={`result__swatch result__swatch--${l.tone}`} />
-                  <span className="result__legend-name">{l.label}</span>
-                  <b>{l.count}</b>
-                </li>
-              ))}
+              <li className="result__legend-item">
+                <span className="result__swatch result__swatch--doc" />
+                <span className="result__legend-name">Подтверждено документом</span>
+                <b>{confirmation.doc}</b>
+              </li>
+              <li className="result__legend-item">
+                <span className="result__swatch result__swatch--nodoc" />
+                <span className="result__legend-name">Без документа</span>
+                <b>{confirmation.nodoc}</b>
+              </li>
+              <li className="result__legend-item">
+                <span className="result__swatch result__swatch--plan" />
+                <span className="result__legend-name">Планы и гипотезы</span>
+                <b>{confirmation.plan}</b>
+              </li>
             </ul>
             <Link to="/passport" className="result__link">Открыть паспорт</Link>
           </section>
 
           <section className="result__panel result__panel--passport">
             <h2 className="result__side-subtitle">Паспорт</h2>
-            {!approved && (
-              <>
-                <p className="result__approve-note">Согласуйте версию, когда всё проверите. Любая правка потом снимет согласование с изменённого поля.</p>
-                <button type="button" onClick={() => setApproved(true)} className="result__approve">Согласовать паспорт</button>
-              </>
-            )}
-            {approved && (
-              <p className="result__approved">
+            {ready ? (
+              <p className="result__ready">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M5 12l5 5 9-10" />
                 </svg>
-                Согласован 8 ноября, версия 3
+                Все блоки и смета одобрены аудитом
               </p>
+            ) : (
+              <p className="result__approve-note">Скачать можно, когда будут закрыты все пункты списка «Что сделать перед подачей».</p>
             )}
             {downloadError && <p role="alert" className="result__download-error">{downloadError}</p>}
             <div className="result__downloads">
-              <button type="button" className="result__download" disabled={!ready} title={hint} onClick={() => void onDownloadDocx()}>Скачать DOCX</button>
-              <button type="button" className="result__download" disabled={!ready} title={hint}>Скачать PDF</button>
+              <button type="button" className="result__download" disabled={!ready} onClick={() => void onDownloadDocx()}>Скачать DOCX</button>
+              <button type="button" className="result__download" disabled={!ready}>Скачать PDF</button>
             </div>
             <p className="result__fine">Скачивание не означает подачу. Заявка подаётся в системе фонда.</p>
           </section>

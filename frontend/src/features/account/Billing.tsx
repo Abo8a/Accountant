@@ -1,6 +1,6 @@
 import { useCallback, useId, useState } from 'react';
 import { useCabinetShell } from '../../shared/layout/CabinetLayout';
-import { DEFAULT_PLAN_ID, FLAGS, planFeatures } from '../../shared/config/flags';
+import { DEFAULT_PLAN_ID, FLAGS } from '../../shared/config/flags';
 import {
   formatRub,
   getPlan,
@@ -77,11 +77,9 @@ export function Billing({ currentPlan = DEFAULT_PLAN_ID }: BillingProps = {}) {
 
   const isFree = currentPlan === 'free';
   const currentPlanName = getPlan(currentPlan).name;
-  const features = planFeatures(getPlan(currentPlan).features);
   const actions = planActions(currentPlan, SUBSCRIPTION.daysLeft);
 
   const chosenPlan = PAID_PLANS[chosen];
-  const filesPercent = Math.round((SUBSCRIPTION.filesUsed / SUBSCRIPTION.filesLimit) * 100);
 
   const openCheckout = (plan: PaidPlanId) => {
     setChosen(plan);
@@ -179,15 +177,6 @@ export function Billing({ currentPlan = DEFAULT_PLAN_ID }: BillingProps = {}) {
         </div>
         {!isFree && (
           <>
-            <div className="billing__usage">
-              <span className="billing__usage-count">
-                Файлы: {SUBSCRIPTION.filesUsed} из {SUBSCRIPTION.filesLimit}
-              </span>
-              <span className="billing__bar" aria-hidden="true">
-                <span className="billing__bar-fill" style={{ width: `${filesPercent}%` }} />
-              </span>
-              {features.novelty_check && <span className="billing__usage-note">Проверка новизны: включена</span>}
-            </div>
             <button
               type="button"
               className="billing__renew"

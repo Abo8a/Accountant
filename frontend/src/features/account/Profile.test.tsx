@@ -20,30 +20,29 @@ describe('Profile', () => {
   it('рендерит заголовок, подзаголовок и данные основателя из дизайна', () => {
     renderProfile();
     expect(screen.getByRole('heading', { level: 1, name: 'Профиль' })).toBeInTheDocument();
-    expect(
-      screen.getByText('Данные основателя. Они попадают в блок 1 паспорта как есть: ИИ их не меняет.'),
-    ).toBeInTheDocument();
+    expect(screen.queryByText('Данные основателя. Они попадают в блок 1 паспорта как есть: ИИ их не меняет.')).not.toBeInTheDocument();
     expect(screen.getByText('Иванов Иван Иванович')).toBeInTheDocument();
-    expect(screen.getByText('ivan@university.ru · аккаунт с 02.11.2026')).toBeInTheDocument();
+    expect(screen.getByText('Аккаунт зарегистрирован 02.11.2026')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ошибка в ФИО? Напишите в поддержку' })).toHaveAttribute('href', '/support');
   });
 
   it('ФИО закреплено за проектом: замок с пояснением, поля ФИО для правки нет', async () => {
     renderProfile();
-    expect(screen.getByText('закреплено за проектом')).toBeInTheDocument();
+    expect(screen.queryByText('закреплено за проектом')).not.toBeInTheDocument();
     expect(screen.getByText('Один аккаунт — один проект. ФИО и проект закреплены друг за другом.')).toBeInTheDocument();
     expect(screen.queryByLabelText(/ФИО/)).not.toBeInTheDocument();
 
     await startEdit();
     expect(screen.queryByLabelText(/ФИО/)).not.toBeInTheDocument();
     expect(screen.getByText('Иванов Иван Иванович')).toBeInTheDocument();
-    expect(screen.getByText('закреплено за проектом')).toBeInTheDocument();
   });
 
   it('режим просмотра: строки телефона, Telegram, обучения и региона', () => {
     renderProfile();
     expect(screen.getByText('+7 916 123-45-67')).toBeInTheDocument();
     expect(screen.getByText('@ivan_monetrix')).toBeInTheDocument();
+    expect(screen.getByText('Почта')).toBeInTheDocument();
+    expect(screen.getByText('ivan@university.ru')).toBeInTheDocument();
     expect(screen.getByText('НИУ «Высшая школа экономики» · бакалавриат, 3 курс')).toBeInTheDocument();
     expect(screen.getByText('Москва')).toBeInTheDocument();
     expect(screen.queryByLabelText(/^Телефон/)).not.toBeInTheDocument();
@@ -190,7 +189,7 @@ describe('Profile', () => {
   it('блоки «Программа» и «Проект» с текстами из дизайна', () => {
     renderProfile();
     expect(screen.getByText('Студенческий стартап')).toBeInTheDocument();
-    expect(screen.getByText('ФСИ · грант для студентов и аспирантов. «Старт-1» и Сколково появятся позже.')).toBeInTheDocument();
+    expect(screen.getByText('ФСИ · грант для студентов и аспирантов.')).toBeInTheDocument();
     expect(screen.getByText('Monetrix')).toBeInTheDocument();
   });
 });

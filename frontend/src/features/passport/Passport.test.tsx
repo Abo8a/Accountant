@@ -36,11 +36,11 @@ describe('Passport', () => {
     expect(screen.getByRole('link', { name: 'Итог проверки' })).toHaveAttribute('href', '/result');
   });
 
-  it('легенда обозначений из пяти пунктов', () => {
+  it('легенда обозначений — три цвета', () => {
     renderPassport();
     const legend = screen.getByRole('list', { name: 'Обозначения' });
     expect(within(legend).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      'Факт с документом', 'Факт без документа', 'План', 'Гипотеза', 'Со слов команды',
+      'Подтверждено документом', 'Без документа', 'План или гипотеза',
     ]);
   });
 
@@ -80,7 +80,7 @@ describe('Passport', () => {
   it('по умолчанию панель показывает выбранное утверждение «две фокус-группы»', () => {
     renderPassport();
     const p = panel();
-    expect(within(p).getByText('Факт без документа')).toBeInTheDocument();
+    expect(within(p).getByText('Без документа')).toBeInTheDocument();
     expect(within(p).getByText('«две фокус-группы по 25 участников»')).toBeInTheDocument();
     expect(within(p).getByText('Документа нет. Эксперт фонда попросит подтверждение: протокол, акт, выписку или материалы исследования.')).toBeInTheDocument();
     expect(within(p).getByText('Комментарий к материалам')).toBeInTheDocument();
@@ -92,7 +92,7 @@ describe('Passport', () => {
     renderPassport();
     await user.click(screen.getByRole('link', { name: 'выручку 10 000 рублей' }));
     const p = panel();
-    expect(within(p).getByText('Факт с документом')).toBeInTheDocument();
+    expect(within(p).getByText('Подтверждено документом')).toBeInTheDocument();
     expect(within(p).getByText('Monetrix_presentation_02.11.pdf')).toBeInTheDocument();
     expect(within(p).getByText('Страница 10')).toBeInTheDocument();
     expect(within(p).getByText('«Выручка: 10 000 ₽»')).toBeInTheDocument();
@@ -107,11 +107,11 @@ describe('Passport', () => {
 
     const types = within(panel()).getByRole('group', { name: 'Тип сведений' });
     expect(within(types).getByRole('button', { name: 'Факт' })).toHaveAttribute('aria-pressed', 'true');
-    await user.click(within(types).getByRole('button', { name: 'План' }));
+    await user.click(within(types).getByRole('button', { name: 'План или гипотеза' }));
 
-    expect(within(types).getByRole('button', { name: 'План' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(types).getByRole('button', { name: 'План или гипотеза' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(types).getByRole('button', { name: 'Факт' })).toHaveAttribute('aria-pressed', 'false');
-    expect(within(panel()).getByText('План', { selector: 'span' })).toBeInTheDocument();
+    expect(within(panel()).getByText('План или гипотеза', { selector: 'span' })).toBeInTheDocument();
     expect(claim).toHaveAttribute('data-kind', 'plan');
     expect(within(panel()).getByText(/План не считается достижением\./)).toBeInTheDocument();
   });

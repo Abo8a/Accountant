@@ -163,3 +163,10 @@
   text-decoration: none;
   cursor: pointer;
 }
+
+/* Неактивная «Продолжить», пока не отвечены все условия участия (эталон Onboarding.dc.html). */
+.ob-btn-primary:disabled {
+  background: var(--color-gray-100);
+  color: var(--color-gray-400);
+  cursor: default;
+}

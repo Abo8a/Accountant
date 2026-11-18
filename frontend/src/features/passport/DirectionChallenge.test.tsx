@@ -50,4 +50,16 @@ describe('DirectionChallenge (направление и вызов)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить направление' }));
     expect(onSubmit).toHaveBeenCalledWith({ direction: 'Н1', challenge: undefined });
   });
+
+  it('ссылка «Не знаю, какое выбрать — помогите» вызывает помощь', async () => {
+    const onHelp = vi.fn();
+    render(<DirectionChallenge onSubmit={vi.fn()} onHelp={onHelp} loadChallenges={async () => CHALLENGES} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Не знаю, какое выбрать — помогите' }));
+    expect(onHelp).toHaveBeenCalledTimes(1);
+  });
+
+  it('без обработчика помощи ссылки нет', () => {
+    render(<DirectionChallenge onSubmit={vi.fn()} loadChallenges={async () => CHALLENGES} />);
+    expect(screen.queryByRole('button', { name: 'Не знаю, какое выбрать — помогите' })).not.toBeInTheDocument();
+  });
 });

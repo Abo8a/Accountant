@@ -82,7 +82,7 @@ function toastForOutcome(status: UploadStatus, name: string): Toast {
 
 function statusLabel(f: ProjectFile): string {
   if (f.st === 'parsing') return 'Разбираем…';
-  return (f.st === 'ocr' ? 'Скан распознан · ' : '') + claimsWord(f.claims);
+  return claimsWord(f.claims);
 }
 
 function rowMeta(f: ProjectFile): string {
@@ -333,7 +333,6 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
               </svg>
               Перетащите файлы сюда или <span className="files__drop-link">загрузите с устройства</span>
             </button>
-            <p className="files__hint">Добавлять можно только материалы по проекту Monetrix: файлы о другом проекте система не примет.</p>
           </>
         ) : (
           <Notice tone="info" title={PAYWALL_TITLE} action={{ label: 'Тарифы', to: '/billing' }}>

@@ -28,9 +28,11 @@ export interface DirectionChallengeProps {
   busy?: boolean;
   /** Для тестов: справочник вызовов без сети. */
   loadChallenges?: () => Promise<TechChallengeOption[]>;
+  /** Ссылка «Не знаю, какое выбрать — помогите» под направлением (эталон Gaps.dc.html): открывает ИИ-Консультанта. */
+  onHelp?: () => void;
 }
 
-export function DirectionChallenge({ onSubmit, busy = false, loadChallenges = fetchChallenges }: DirectionChallengeProps) {
+export function DirectionChallenge({ onSubmit, busy = false, loadChallenges = fetchChallenges, onHelp }: DirectionChallengeProps) {
   const [direction, setDirection] = useState('');
   const [challenge, setChallenge] = useState('');
   const [all, setAll] = useState<TechChallengeOption[]>([]);
@@ -77,6 +79,15 @@ export function DirectionChallenge({ onSubmit, busy = false, loadChallenges = fe
         />
         {DIRECTIONS.some((d) => d.id === direction) && (
           <p className="dc-hint">{`${direction}. ${DIRECTIONS.find((d) => d.id === direction)?.name ?? ''}`}</p>
+        )}
+        {onHelp && (
+          <button type="button" onClick={onHelp} className="dc-help">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.6A8 8 0 1 1 21 12z" />
+              <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.2M12 16.5h.01" />
+            </svg>
+            Не знаю, какое выбрать — помогите
+          </button>
         )}
       </fieldset>
       <div className="dc-field">

@@ -29,14 +29,15 @@ function isDirectionField(tf: TargetField): boolean {
   return tf.section_id === 4 && (tf.field_key === 'direction' || tf.field_key === 'tech_challenge');
 }
 
-function LiveGapsScreen({ initial, onDone }: LiveGapsProps) {
+function LiveGapsScreen({ initial, onDone, onHelp }: LiveGapsProps & { onHelp: () => void }) {
   const [res, setRes] = useState<PipelineResponse | undefined>(initial);
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Пробелы, которые студент пропустил «вернуться позже»: пайплайн не предлагает их, пока студент не вернётся.
   const [skipped, setSkipped] = useState<TargetField[]>([]);
-  const [showHelp, setShowHelp] = useState(false);
+  // «Не знаю — помогите» открывает ИИ-Консультанта.
+  const askHelp = onHelp;
 
   async function send(body: Parameters<typeof callPassportPipeline>[0]) {
     setBusy(true);
@@ -65,7 +66,6 @@ function LiveGapsScreen({ initial, onDone }: LiveGapsProps) {
   function skipGap(tf: TargetField) {
     const next = [...skipped, tf];
     setSkipped(next);
-    setShowHelp(false);
     void send({ action: 'skip_gap', target_field: tf, skipped_fields: next });
   }
 
@@ -122,6 +122,7 @@ function LiveGapsScreen({ initial, onDone }: LiveGapsProps) {
           {res.rejection_reason && <AuditRemark remark={res.rejection_reason} />}
           <DirectionChallenge
             busy={busy}
+            onHelp={askHelp}
             onSubmit={(v: DirectionChallengeValue) =>
               send({
                 action: 'submit_form',
@@ -143,7 +144,6 @@ function LiveGapsScreen({ initial, onDone }: LiveGapsProps) {
         {res.question && <p className="ob-lead lg__question">{res.question}</p>}
         {res.criteria && <p className="lg__example">{`Что проверяет фонд: ${res.criteria}`}</p>}
         {res.example && <p className="lg__example">{`Как обычно пишут: ${res.example}`}</p>}
-        {res.rejection_reason && <AuditRemark remark={res.rejection_reason} />}
         <form
           className="lg__form"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
@@ -160,15 +160,16 @@ function LiveGapsScreen({ initial, onDone }: LiveGapsProps) {
             Ваш ответ
           </label>
           <textarea id="lg-answer" className="ob-textarea" rows={4} value={answer} onChange={(e) => setAnswer(e.target.value)} />
+          {/* Замечание аудита — под полем ответа, как в эталоне. */}
+          {res.rejection_reason && <AuditRemark remark={res.rejection_reason} />}
           {error && <p role="alert" className="lg__error">{error}</p>}
           <Button type="submit" variant="primary" disabled={busy}>
             Отправить ответ
           </Button>
         </form>
-        <Button variant="outline" disabled={busy} onClick={() => setShowHelp(true)}>
+        <Button variant="outline" disabled={busy} onClick={askHelp}>
           Не знаю — помогите
         </Button>
-        {showHelp && <p className="lg__example">{`Спросите ИИ-Консультанта: «${res.question ?? ''}»`}</p>}
         <Button variant="outline" disabled={busy} onClick={() => skipGap(tf)}>
           Пропустить и вернуться позже
         </Button>
@@ -185,10 +186,12 @@ function LiveGapsScreen({ initial, onDone }: LiveGapsProps) {
 
 /** Живой экран пробелов с ИИ-Консультантом: виджет доступен и на смете, и на направлении (они внутри этого экрана). */
 export function LiveGaps(props: LiveGapsProps) {
+  // Каждое нажатие «Не знаю — помогите» увеличивает счётчик, и виджет открывает чат.
+  const [helpSignal, setHelpSignal] = useState(0);
   return (
     <>
-      <LiveGapsScreen {...props} />
-      <ConsultantWidget />
+      <LiveGapsScreen {...props} onHelp={() => setHelpSignal((n) => n + 1)} />
+      <ConsultantWidget openSignal={helpSignal} />
     </>
   );
 }

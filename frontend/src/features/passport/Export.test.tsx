@@ -34,7 +34,7 @@ describe('Скачивание паспорта', () => {
     );
     const docx = screen.getByRole('button', { name: 'Скачать DOCX' });
     expect(docx).toBeDisabled();
-    expect(docx).toHaveAttribute('title', 'Скачать можно, когда все 10 блоков одобрены');
+    expect(screen.getByText('Скачать можно, когда будут закрыты все пункты списка «Что сделать перед подачей».')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Скачать PDF' })).toBeDisabled();
   });
 

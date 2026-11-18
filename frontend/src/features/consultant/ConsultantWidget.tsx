@@ -6,6 +6,8 @@ import './ConsultantWidget.css';
 export interface ConsultantWidgetProps {
   activeSectionId?: number;
   userId?: string;
+  /** Счётчик просьб открыть чат: каждое изменение (больше нуля) открывает панель. Кнопки «Не знаю — помогите». */
+  openSignal?: number;
 }
 
 const QUICK_PROMPTS = [
@@ -14,8 +16,12 @@ const QUICK_PROMPTS = [
   'Помоги сформулировать текущий блок по правилам ФСИ',
 ];
 
-export function ConsultantWidget({ activeSectionId, userId }: ConsultantWidgetProps) {
+export function ConsultantWidget({ activeSectionId, userId, openSignal = 0 }: ConsultantWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (openSignal > 0) setIsOpen(true);
+  }, [openSignal]);
   const [messages, setMessages] = useState<ChatMessageOut[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);

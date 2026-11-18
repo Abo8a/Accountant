@@ -17,9 +17,10 @@ describe('DesignSystem', () => {
     expect(screen.getByText('Паспорт', { selector: '.logo__product' })).toBeInTheDocument();
   });
 
-  it('показывает все шесть типов утверждений и статусы', () => {
+  it('показывает три цвета утверждений, потерянную привязку и статусы', () => {
     render(<DesignSystem />);
-    expect(document.querySelectorAll('[data-kind]')).toHaveLength(6);
+    expect(document.querySelectorAll('[data-kind]')).toHaveLength(4);
+    for (const name of ['Подтверждено документом', 'Без документа', 'План или гипотеза']) expect(screen.getByText(name)).toBeInTheDocument();
     expect(screen.getByText('Потеряна привязка')).toBeInTheDocument();
     expect(screen.getByText('Нужна проверка')).toHaveAttribute('data-tone', 'warning');
     expect(screen.getByText('Можно готовить заявку')).toHaveAttribute('data-tone', 'success');
