@@ -26,21 +26,28 @@ input:focus,select:focus{outline: 3px solid #FFB38A; outline-offset: 1px}
     <ol aria-label="Шаги" style="margin: 0 auto; padding: 0; list-style: none; display: flex; gap: 12px; align-items: center; font-size: 15px; font-weight: 600">
       <li aria-current="step" style="display: flex; align-items: center; gap: 8px; color: #17171C"><span style="width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #FF6B1A">1</span>Профиль</li>
       <li aria-hidden="true" style="width: 32px; height: 2px; background: #E4E4E7"></li>
-      <li style="display: flex; align-items: center; gap: 8px; color: #71717A"><span style="width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #F4F4F5">2</span>Допуск</li>
+      <li style="display: flex; align-items: center; gap: 8px; color: #71717A"><span style="width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #F4F4F5">2</span>О проекте</li>
       <li aria-hidden="true" style="width: 32px; height: 2px; background: #E4E4E7"></li>
-      <li style="display: flex; align-items: center; gap: 8px; color: #71717A"><span style="width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #F4F4F5">3</span>О проекте</li>
-      <li aria-hidden="true" style="width: 32px; height: 2px; background: #E4E4E7"></li>
-      <li style="display: flex; align-items: center; gap: 8px; color: #71717A"><span style="width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #F4F4F5">4</span>Сборка паспорта</li>
+      <li style="display: flex; align-items: center; gap: 8px; color: #71717A"><span style="width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #F4F4F5">3</span>Сборка паспорта</li>
     </ol>
     <span style="font-size: 15px; color: #52525B">ivan@university.ru</span>
   </div>
 </header>
 
 <main style="max-width: 1080px; margin: 0 auto; padding: 48px 32px 80px; display: flex; flex-direction: column; gap: 40px">
-  <div style="display: flex; flex-direction: column; gap: 10px">
-    <p style="margin: 0; font-size: 15px; font-weight: 600; color: #C2410C">Блок 1 паспорта</p>
-    <h1 style="margin: 0; font-size: 48px; font-weight: 800; letter-spacing: -0.02em">Расскажите о себе</h1>
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap">
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <p style="margin: 0; font-size: 15px; font-weight: 600; color: #C2410C">Блок 1 паспорта</p>
+      <h1 style="margin: 0; font-size: 48px; font-weight: 800; letter-spacing: -0.02em">Расскажите о себе</h1>
+    </div>
+    <div role="group" aria-label="Вариант для прототипа" style="display: flex; align-items: center; gap: 4px; background: #F4F4F5; border-radius: 999px; padding: 4px; font-size: 13px">
+      <span style="padding: 0 8px; color: #52525B">Прототип:</span>
+      <button type="button" onClick="{{ demoPass }}" style="{{ demoPassStyle }}">Допуск</button>
+      <button type="button" onClick="{{ demoFail }}" style="{{ demoFailStyle }}">Отказ</button>
+    </div>
   </div>
+
+  <sc-if value="{{ isForm }}" hint-placeholder-val="{{ true }}">
 
   <section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px">
     <fieldset aria-label="ФИО" style="border: 0; padding: 0; margin: 0; min-width: 0; grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px">
@@ -100,7 +107,7 @@ input:focus,select:focus{outline: 3px solid #FFB38A; outline-offset: 1px}
       <sc-if value="{{ notStudying }}" hint-placeholder-val="{{ false }}">
         <div role="status" style="display: flex; gap: 12px; padding: 14px 18px; background: #FEF3C7; border-radius: 14px; font-size: 15px; line-height: 1.5; color: #78350F">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex: none"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5M12 16h.01"></path></svg>
-          <span>Участвовать в «Студенческом стартапе» могут только студенты и аспиранты. На следующем шаге это проверит анкета допуска.</span>
+          <span>Участвовать в «Студенческом стартапе» могут только студенты и аспиранты.</span>
         </div>
       </sc-if>
     </fieldset>
@@ -133,6 +140,22 @@ input:focus,select:focus{outline: 3px solid #FFB38A; outline-offset: 1px}
     </div>
   </section>
 
+  <section aria-labelledby="elig-title" style="display: flex; flex-direction: column; gap: 16px">
+    <h2 id="elig-title" style="margin: 0; font-size: 26px; font-weight: 700">Условия участия<span aria-hidden="true" style="color: #B91C1C; font-weight: 700"> *</span></h2>
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="4">
+        <fieldset style="margin: 0; border: 1px solid #E4E4E7; border-radius: 22px; padding: 22px 24px; display: flex; justify-content: space-between; align-items: center; gap: 18px; flex-wrap: wrap">
+          <legend style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">{{ q.text }}</legend>
+          <span aria-hidden="true" style="flex: 1 1 360px; display: flex; gap: 14px; align-items: flex-start; font-size: 18px; font-weight: 600; line-height: 1.4"><span style="flex: none; width: 32px; height: 32px; border-radius: 999px; background: #FFF1E8; color: #C2410C; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700">{{ q.n }}</span><span style="display: flex; flex-direction: column; gap: 6px"><span>{{ q.text }}</span><sc-if value="{{ q.hasHint }}" hint-placeholder-val="{{ false }}"><span style="font-size: 14px; font-weight: 400; line-height: 1.45; color: #71717A">{{ q.hint }}</span></sc-if></span></span>
+          <span style="display: flex; gap: 8px">
+            <button type="button" aria-pressed="{{ q.yesPressed }}" onClick="{{ q.yes }}" style="{{ q.yesStyle }}">Да</button>
+            <button type="button" aria-pressed="{{ q.noPressed }}" onClick="{{ q.no }}" style="{{ q.noStyle }}">Нет</button>
+          </span>
+        </fieldset>
+      </sc-for>
+    </div>
+  </section>
+
   <section style="background: #FFF1E8; border-radius: 24px; padding: 28px 32px; display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap">
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#C2410C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
     <div style="flex: 1 1 400px; display: flex; flex-direction: column; gap: 8px">
@@ -146,17 +169,83 @@ input:focus,select:focus{outline: 3px solid #FFB38A; outline-offset: 1px}
 
   <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap">
     <p style="margin: 0; font-size: 14px; color: #71717A"><span style="color: #B91C1C; font-weight: 700">*</span> — обязательные поля</p>
-    <a href="Eligibility.dc.html" style="display: inline-flex; align-items: center; gap: 10px; min-height: 60px; padding: 0 36px; background: #FF6B1A; border-radius: 999px; color: #17171C; text-decoration: none; font-weight: 700; font-size: 18px">Продолжить
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#17171C" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></a>
+    <span style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+      <sc-if value="{{ notAll }}" hint-placeholder-val="{{ true }}"><span style="font-size: 15px; color: #71717A">Условия участия: {{ answered }} из 4</span></sc-if>
+      <sc-if value="{{ allOk }}" hint-placeholder-val="{{ false }}"><a href="Brief.dc.html" style="display: inline-flex; align-items: center; gap: 10px; min-height: 60px; padding: 0 36px; border-radius: 999px; font: 700 18px Onest, system-ui, sans-serif; background: #FF6B1A; color: #17171C; text-decoration: none">Продолжить
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></a></sc-if>
+      <sc-if value="{{ allFail }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ submit }}" style="display: inline-flex; align-items: center; gap: 10px; min-height: 60px; padding: 0 36px; border-radius: 999px; font: 700 18px Onest, system-ui, sans-serif; border: 0; background: #FF6B1A; color: #17171C; cursor: pointer">Продолжить
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></button></sc-if>
+      <sc-if value="{{ notAll }}" hint-placeholder-val="{{ true }}"><button type="button" disabled="" style="display: inline-flex; align-items: center; gap: 10px; min-height: 60px; padding: 0 36px; border-radius: 999px; font: 700 18px Onest, system-ui, sans-serif; border: 0; background: #F4F4F5; color: #A1A1AA">Продолжить
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></button></sc-if>
+    </span>
   </div>
+  </sc-if>
+
+  <sc-if value="{{ isRejected }}" hint-placeholder-val="{{ false }}">
+  <section role="alert" style="background: #FEF2F2; border-radius: 28px; padding: 32px; display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; gap: 18px; align-items: center; flex-wrap: wrap">
+      <span style="flex: none; width: 64px; height: 64px; border-radius: 20px; background: #B91C1C; display: inline-flex; align-items: center; justify-content: center"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></span>
+      <div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 6px">
+        <h2 style="margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.01em">Проект не проходит проверку допуска</h2>
+        <p style="margin: 0; font-size: 16px; line-height: 1.55; color: #7F1D1D">Решение окончательное: с этими ответами собрать паспорт для программы нельзя.</p>
+      </div>
+    </div>
+    <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+      <sc-for list="{{ reasons }}" as="r" hint-placeholder-count="1">
+        <li style="background: #FFFFFF; border-radius: 18px; padding: 18px 20px; display: flex; flex-direction: column; gap: 6px">
+          <span style="font-size: 17px; font-weight: 700; color: #7F1D1D">{{ r.reason }}</span>
+          <span style="font-size: 15px; line-height: 1.5; color: #3F3F46">{{ r.fix }}</span>
+        </li>
+      </sc-for>
+    </ul>
+    <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #52525B">Ответили по ошибке? Напишите в поддержку — проверим вручную.</p>
+    <div style="display: flex; gap: 12px; flex-wrap: wrap">
+      <a href="Support.dc.html" style="display: inline-flex; align-items: center; min-height: 52px; padding: 0 24px; background: #17171C; border-radius: 999px; color: #FFFFFF; text-decoration: none; font-weight: 600; font-size: 16px">Написать в поддержку</a>
+      <a href="Main.dc.html" style="display: inline-flex; align-items: center; min-height: 52px; padding: 0 20px; font-weight: 600; font-size: 16px">На главную</a>
+    </div>
+  </section>
+  </sc-if>
 </main>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
 class Component extends DCLogic {
-  constructor(props) { super(props); this.state = { studying: true, noMiddle: false }; }
+  constructor(props) {
+    super(props);
+    // Вопросы допуска, нужные ответы, причины и способы исправления — из manifest.json (eligibility) бэкенда.
+    this.qs = [
+      { key: 'is_student_or_postgraduate', text: 'Вы являетесь студентом или аспирантом?', hint: 'Для участия нужно быть студентом или аспирантом.', need: true, reason: 'Нет статуса студента или аспиранта.', fix: 'Участвовать в программе могут только студенты и аспиранты.' },
+      { key: 'has_open_fsi_contracts_or_applications', text: 'Есть ли у вас открытые договоры или заявки в Фонде содействия инновациям (ФСИ)?', hint: 'У вас не должно быть открытых договоров и заявок в Фонде.', need: false, reason: 'Есть открытые договоры или заявки в ФСИ.', fix: 'Участие возможно только при отсутствии открытых договоров и заявок в Фонде.' },
+      { key: 'has_prior_student_startup_grant', text: 'Получали ли вы ранее грант «Студенческий стартап»?', hint: 'Участвовать можно, только если вы раньше не получали этот грант.', need: false, reason: 'Ранее вы получали грант «Студенческий стартап».', fix: 'Повторно получить этот грант нельзя.' },
+      { key: 'ready_to_open_llc_after_win', text: 'Готовы ли вы открыть новое ООО после победы в конкурсе?', hint: 'Это обязательное условие участия в конкурсе: грант получает новое ООО, зарегистрированное после победы.', need: true, reason: 'Вы не готовы открыть новое ООО после победы.', fix: 'Грант предполагает регистрацию нового ООО после победы. Без этого участие невозможно.' }
+    ];
+    this.state = { studying: true, noMiddle: false, answers: {}, rejected: false };
+  }
   renderVals() {
+    const { answers, rejected } = this.state;
+    const on = 'min-height: 48px; padding: 0 26px; border-radius: 999px; border: 2px solid #17171C; background: #17171C; color: #FFFFFF; font: 600 16px Onest, system-ui, sans-serif; cursor: pointer';
+    const off = 'min-height: 48px; padding: 0 26px; border-radius: 999px; border: 1px solid #D4D4D8; background: #FFFFFF; color: #17171C; font: 600 16px Onest, system-ui, sans-serif; cursor: pointer';
+    const set = (k, v) => { const a = Object.assign({}, answers); a[k] = v; this.setState({ answers: a }); };
+    const answered = this.qs.filter(q => answers[q.key] !== undefined).length;
+    const fails = this.qs.filter(q => answers[q.key] !== undefined && answers[q.key] !== q.need);
+    const all = answered === this.qs.length;
+    const tOn = 'min-height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: #FFFFFF; font: 600 13px Onest, system-ui, sans-serif; color: #17171C; cursor: pointer';
+    const tOff = 'min-height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; font: 500 13px Onest, system-ui, sans-serif; color: #52525B; cursor: pointer';
     return {
+      isForm: !rejected, isRejected: rejected,
+      questions: this.qs.map((q, i) => ({
+        n: i + 1, text: q.text, hasHint: !!q.hint, hint: q.hint || '',
+        yesPressed: answers[q.key] === true ? 'true' : 'false', noPressed: answers[q.key] === false ? 'true' : 'false',
+        yesStyle: answers[q.key] === true ? on : off, noStyle: answers[q.key] === false ? on : off,
+        yes: () => set(q.key, true), no: () => set(q.key, false)
+      })),
+      answered,
+      notAll: !all, allOk: all && fails.length === 0, allFail: all && fails.length > 0,
+      submit: () => this.setState({ rejected: true }),
+      reasons: (fails.length ? fails : [this.qs[0]]).map(q => ({ reason: q.reason, fix: q.fix })),
+      demoPass: () => this.setState({ rejected: false, answers: { is_student_or_postgraduate: true, has_open_fsi_contracts_or_applications: false, has_prior_student_startup_grant: false, ready_to_open_llc_after_win: true } }),
+      demoFail: () => this.setState({ rejected: true, answers: { is_student_or_postgraduate: true, has_open_fsi_contracts_or_applications: true, has_prior_student_startup_grant: false, ready_to_open_llc_after_win: true } }),
+      demoPassStyle: rejected ? tOff : tOn, demoFailStyle: rejected ? tOn : tOff,
       studying: this.state.studying,
       notStudying: !this.state.studying,
       studyingAria: this.state.studying ? 'true' : 'false',

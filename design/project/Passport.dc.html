@@ -68,11 +68,9 @@ textarea:focus{outline: 3px solid #FFB38A; outline-offset: 1px}
 
   <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 12px 16px; background: #FAFAFA; border-radius: 18px">
     <ul aria-label="Обозначения" style="margin: 0; padding: 0; list-style: none; display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; color: #3F3F46">
-      <li style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 10px; background: #DCFCE7; border-bottom: 2px solid #15803D"></span>Факт с документом</li>
-      <li style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 10px; background: #FEF3C7; border-bottom: 2px dashed #B45309"></span>Факт без документа</li>
-      <li style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 10px; background: #DBEAFE; border-bottom: 2px dotted #1D4ED8"></span>План</li>
-      <li style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 10px; background: #EDE9FE; border-bottom: 2px solid #8B5CF6"></span>Гипотеза</li>
-      <li style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 10px; background: #F4F4F5; border-bottom: 2px dashed #71717A"></span>Со слов команды</li>
+      <li style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 10px; background: #DCFCE7; border-bottom: 2px solid #15803D"></span>Подтверждено документом</li>
+      <li style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 10px; background: #FEF3C7; border-bottom: 2px dashed #B45309"></span>Без документа</li>
+      <li style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 10px; background: #DBEAFE; border-bottom: 2px dotted #1D4ED8"></span>План или гипотеза</li>
     </ul>
     <button type="button" aria-pressed="{{ expertPressed }}" onClick="{{ toggleExpert }}" style="display: inline-flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 6px 0 14px; border: 0; background: transparent; font: 600 15px Onest, system-ui, sans-serif; color: #17171C; cursor: pointer">
       Глазами эксперта
@@ -180,7 +178,7 @@ textarea:focus{outline: 3px solid #FFB38A; outline-offset: 1px}
           <div style="display: flex; flex-direction: column; gap: 8px">
             <span style="font-size: 13px; font-weight: 600; color: #71717A; text-transform: uppercase; letter-spacing: 0.04em">Тип сведений</span>
             <div role="group" aria-label="Тип сведений" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px">
-              <sc-for list="{{ claim.typeBtns }}" as="b" hint-placeholder-count="4"><button type="button" aria-pressed="{{ b.pressed }}" onClick="{{ b.pick }}" style="{{ b.style }}">{{ b.label }}</button></sc-for>
+              <sc-for list="{{ claim.typeBtns }}" as="b" hint-placeholder-count="2"><button type="button" aria-pressed="{{ b.pressed }}" onClick="{{ b.pick }}" style="{{ b.style }}">{{ b.label }}</button></sc-for>
             </div>
           </div>
           <div style="display: flex; flex-direction: column; gap: 8px">
@@ -343,11 +341,11 @@ class Component extends DCLogic {
   renderVals() {
     const st = this.state;
     const look = {
-      ok: ['background: #DCFCE7; border-bottom: 2px solid #15803D', 'Факт с документом', 'background: #DCFCE7; color: #166534'],
-      nodoc: ['background: #FEF3C7; border-bottom: 2px dashed #B45309', 'Факт без документа', 'background: #FEF3C7; color: #92400E'],
-      plan: ['background: #DBEAFE; border-bottom: 2px dotted #1D4ED8', 'План', 'background: #DBEAFE; color: #1E40AF'],
-      hyp: ['background: #EDE9FE; border-bottom: 2px solid #8B5CF6', 'Гипотеза', 'background: #EDE9FE; color: #5B21B6'],
-      client: ['background: #F4F4F5; border-bottom: 2px dashed #71717A', 'Со слов команды', 'background: #F4F4F5; color: #3F3F46']
+      ok: ['background: #DCFCE7; border-bottom: 2px solid #15803D', 'Подтверждено документом', 'background: #DCFCE7; color: #166534'],
+      nodoc: ['background: #FEF3C7; border-bottom: 2px dashed #B45309', 'Без документа', 'background: #FEF3C7; color: #92400E'],
+      client: ['background: #FEF3C7; border-bottom: 2px dashed #B45309', 'Без документа', 'background: #FEF3C7; color: #92400E'],
+      plan: ['background: #DBEAFE; border-bottom: 2px dotted #1D4ED8', 'План или гипотеза', 'background: #DBEAFE; color: #1E40AF'],
+      hyp: ['background: #DBEAFE; border-bottom: 2px dotted #1D4ED8', 'План или гипотеза', 'background: #DBEAFE; color: #1E40AF']
     };
     const risky = { nodoc: true, client: true };
     const statusLook = {
@@ -430,9 +428,9 @@ class Component extends DCLogic {
         hasSource: !!c[2], noSource: !c[2], source: c[2] || '', page: c[3] || '', quote: c[4] || '',
         origin: c[6] || 'Слова пользователя', advice,
         conf: Math.round(c[5] * 100) + '%',
-        typeBtns: [['fact', 'Факт'], ['plan', 'План'], ['hyp', 'Гипотеза'], ['client', 'Со слов']].map(([id, label]) => ({
-          label, pressed: type === id ? 'true' : 'false',
-          style: tb + (type === id ? 'border: 2px solid #17171C; background: #FFFFFF; color: #17171C' : 'border: 1px solid #E4E4E7; background: #FAFAFA; color: #3F3F46'),
+        typeBtns: [['fact', 'Факт'], ['plan', 'План или гипотеза']].map(([id, label]) => ({
+          label, pressed: (id === 'plan' ? (type === 'plan' || type === 'hyp') : (type === 'fact' || type === 'client')) ? 'true' : 'false',
+          style: tb + ((id === 'plan' ? (type === 'plan' || type === 'hyp') : (type === 'fact' || type === 'client')) ? 'border: 2px solid #17171C; background: #FFFFFF; color: #17171C' : 'border: 1px solid #E4E4E7; background: #FAFAFA; color: #3F3F46'),
           pick: () => { const t = Object.assign({}, st.types); t[st.sel] = id; this.setState({ types: t }); }
         }))
       };

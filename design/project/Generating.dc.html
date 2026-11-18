@@ -27,11 +27,9 @@ a{color:#C2410C}a:hover{color:#9A3412}
     <ol aria-label="Шаги" style="margin: 0 auto; padding: 0; list-style: none; display: flex; gap: 12px; align-items: center; font-size: 15px; font-weight: 600">
       <li style="display: flex; align-items: center; gap: 8px; color: #15803D"><span style="width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #DCFCE7"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Профиль</li>
       <li aria-hidden="true" style="width: 32px; height: 2px; background: #E4E4E7"></li>
-      <li style="display: flex; align-items: center; gap: 8px; color: #15803D"><span style="width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #DCFCE7"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Допуск</li>
-      <li aria-hidden="true" style="width: 32px; height: 2px; background: #E4E4E7"></li>
       <li style="display: flex; align-items: center; gap: 8px; color: #15803D"><span style="width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #DCFCE7"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>О проекте</li>
       <li aria-hidden="true" style="width: 32px; height: 2px; background: #E4E4E7"></li>
-      <li aria-current="step" style="display: flex; align-items: center; gap: 8px; color: #17171C"><span style="width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #FF6B1A">4</span>Сборка паспорта</li>
+      <li aria-current="step" style="display: flex; align-items: center; gap: 8px; color: #17171C"><span style="width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #FF6B1A">3</span>Сборка паспорта</li>
     </ol>
     <button type="button" onClick="{{ toggleError }}" style="min-height: 36px; padding: 0 14px; border: 1px dashed #D4D4D8; background: #FFFFFF; border-radius: 999px; font: 500 13px Onest, system-ui, sans-serif; color: #52525B; cursor: pointer">Прототип: {{ errorLabel }}</button>
   </div>
@@ -51,7 +49,23 @@ a{color:#C2410C}a:hover{color:#9A3412}
     <sc-if value="{{ done }}" hint-placeholder-val="{{ false }}">
       <div style="display: flex; flex-direction: column; gap: 16px">
         <h1 style="margin: 0; font-size: 48px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1">Черновик паспорта готов</h1>
-        <p style="margin: 0; font-size: 18px; line-height: 1.5; color: #52525B">Заполнено 7 блоков из 9, аудит одобрил 3 из них. Осталось закрыть 7 пробелов, включая направление и смету.</p>
+        <ul aria-label="Итог сборки" style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+          <li style="min-width: 0; background: #FAFAFA; border-radius: 20px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px">
+            <span style="font-size: 15px; font-weight: 600; color: #3F3F46">Заполнено блоков</span>
+            <span style="display: flex; align-items: baseline; gap: 6px"><b style="font-size: 36px; font-weight: 800; line-height: 1">7</b><span style="font-size: 17px; color: #52525B">из 9</span></span>
+            <span aria-hidden="true" style="display: block; height: 8px; border-radius: 999px; background: #E4E4E7; overflow: hidden"><span style="display: block; height: 100%; width: 77.8%; background: #17171C; border-radius: 999px"></span></span>
+          </li>
+          <li style="min-width: 0; background: #FAFAFA; border-radius: 20px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px">
+            <span style="font-size: 15px; font-weight: 600; color: #3F3F46">Одобрено аудитом</span>
+            <span style="display: flex; align-items: baseline; gap: 6px"><b style="font-size: 36px; font-weight: 800; line-height: 1; color: #15803D">3</b><span style="font-size: 17px; color: #52525B">из 9</span></span>
+            <span aria-hidden="true" style="display: block; height: 8px; border-radius: 999px; background: #E4E4E7; overflow: hidden"><span style="display: block; height: 100%; width: 33.3%; background: #15803D; border-radius: 999px"></span></span>
+          </li>
+          <li style="min-width: 0; background: #FAFAFA; border-radius: 20px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; background: #FFFBEB">
+            <span style="font-size: 15px; font-weight: 600; color: #3F3F46">Осталось пробелов</span>
+            <span style="display: flex; align-items: baseline; gap: 6px"><b style="font-size: 36px; font-weight: 800; line-height: 1; color: #B45309">7</b></span>
+            <span style="font-size: 14px; color: #92400E">включая направление и смету</span>
+          </li>
+        </ul>
         <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px">
           <a href="Gaps.dc.html" style="display: inline-flex; align-items: center; min-height: 60px; padding: 0 32px; background: #FF6B1A; border-radius: 999px; color: #17171C; text-decoration: none; font-weight: 700; font-size: 18px">Ответить на вопросы</a>
           <a href="Passport.dc.html" style="display: inline-flex; align-items: center; min-height: 60px; padding: 0 24px; border: 2px solid #17171C; border-radius: 999px; color: #17171C; text-decoration: none; font-weight: 600; font-size: 17px">Сначала посмотреть паспорт</a>
@@ -74,10 +88,7 @@ a{color:#C2410C}a:hover{color:#9A3412}
           <sc-if value="{{ st.isDone }}" hint-placeholder-val="{{ true }}"><span style="flex: none; width: 32px; height: 32px; border-radius: 999px; background: #DCFCE7; display: inline-flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span></sc-if>
           <sc-if value="{{ st.isActive }}" hint-placeholder-val="{{ false }}"><span style="flex: none; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="animation: buhaSpin 1s linear infinite"><circle cx="12" cy="12" r="9" stroke="#FFE0CC" stroke-width="3"></circle><path d="M12 3a9 9 0 0 1 9 9" stroke="#FF6B1A" stroke-width="3" stroke-linecap="round"></path></svg></span></sc-if>
           <sc-if value="{{ st.isPending }}" hint-placeholder-val="{{ false }}"><span style="flex: none; width: 32px; height: 32px; border-radius: 999px; border: 2px solid #E4E4E7; box-sizing: border-box"></span></sc-if>
-          <span style="display: flex; flex-direction: column; gap: 2px">
-            <span style="font-size: 17px; font-weight: 600; {{ st.titleColor }}">{{ st.title }}</span>
-            <span style="font-size: 14px; color: #71717A">{{ st.sub }}</span>
-          </span>
+          <span style="font-size: 17px; font-weight: 600; {{ st.titleColor }}">{{ st.title }}</span>
         </li>
       </sc-for>
     </ol>
@@ -87,8 +98,8 @@ a{color:#C2410C}a:hover{color:#9A3412}
         <h2 style="margin: 0; font-size: 18px; font-weight: 700">Найдено утверждений</h2>
         <span style="font-size: 28px; font-weight: 800">{{ total }}</span>
       </div>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px">
-        <sc-for list="{{ counts }}" as="c" hint-placeholder-count="5">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px">
+        <sc-for list="{{ counts }}" as="c" hint-placeholder-count="3">
           <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #FAFAFA; border-radius: 14px">
             <span style="{{ c.sw }}"></span>
             <span style="font-size: 14px; color: #3F3F46; flex: 1">{{ c.label }}</span>
@@ -114,16 +125,16 @@ class Component extends DCLogic {
   renderVals() {
     const { step, error } = this.state;
     const defs = [
-      ['Проверяем тариф и лимиты', 'Профессиональный · 2 из 10 файлов'],
-      ['Распознаём документы', 'Monetrix_presentation_02.11.pdf · 15 страниц'],
-      ['Раскладываем по блокам 2–10', 'Каждое утверждение — с типом и источником'],
-      ['Фиксируем якорь проекта', 'По блокам «Проблема» и «Продукт» — для защиты от подмены'],
-      ['Проводим аудит', 'Проверяем блоки, смету и цитаты по правилам фонда'],
-      ['Ищем пробелы', 'Что ещё нужно, чтобы аудит одобрил блоки']
+      'Проверяем тариф и лимиты',
+      'Распознаём документы',
+      'Раскладываем по блокам 2–10',
+      'Фиксируем якорь проекта',
+      'Проводим аудит',
+      'Ищем пробелы'
     ];
     const done = step >= 6 && !error;
     const scale = Math.min(step, 6) / 6;
-    const base = [['Факт с документом', 6, '#DCFCE7', '#15803D', 'solid'], ['Факт без документа', 3, '#FEF3C7', '#B45309', 'dashed'], ['План', 5, '#DBEAFE', '#1D4ED8', 'dotted'], ['Гипотеза', 2, '#EDE9FE', '#6D28D9', 'solid'], ['Со слов команды', 2, '#F4F4F5', '#52525B', 'dashed']];
+    const base = [['Подтверждено документом', 6, '#DCFCE7', '#15803D', 'solid'], ['Без документа', 5, '#FEF3C7', '#B45309', 'dashed'], ['План или гипотеза', 7, '#DBEAFE', '#1D4ED8', 'dotted']];
     const counts = base.map(([label, n, bg, bd, ls]) => ({ label, n: Math.round(n * scale), sw: 'flex: none; width: 14px; height: 14px; border-radius: 4px; background: ' + bg + '; border: 2px ' + ls + ' ' + bd }));
     return {
       done, notDone: !done, error,
@@ -131,11 +142,11 @@ class Component extends DCLogic {
       toggleError: () => this.setState({ error: !error }),
       total: counts.reduce((a, c) => a + c.n, 0),
       counts,
-      steps: defs.map(([title, sub], i) => {
+      steps: defs.map((title, i) => {
         const isDone = i < step && !(error && i === step);
         const isActive = i === step && !error;
         return {
-          title, sub, isDone, isActive, isPending: !isDone && !isActive,
+          title, isDone, isActive, isPending: !isDone && !isActive,
           rowBg: isActive ? 'background: #FFFFFF; box-shadow: 0 4px 16px rgba(23,23,28,0.06)' : '',
           titleColor: (!isDone && !isActive) ? 'color: #71717A' : 'color: #17171C'
         };

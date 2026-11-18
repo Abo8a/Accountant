@@ -56,7 +56,7 @@ textarea:focus,input:focus,select:focus{outline: 3px solid #FFB38A; outline-offs
         <h1 style="margin: 0; font-size: 40px; font-weight: 800; letter-spacing: -0.02em">Смета</h1>
         <span style="{{ statusStyle }}">{{ statusText }}</span>
       </div>
-      <p style="margin: 0; font-size: 17px; line-height: 1.5; color: #52525B">Грант — 1 000 000 ₽ на год: этап 1 длится 2 месяца, этап 2 — 10 месяцев. Сумма сметы должна совпасть с суммой гранта.</p>
+      <p style="margin: 0; font-size: 17px; line-height: 1.5; color: #52525B">Сумма сметы должна совпасть с суммой гранта.</p>
     </div>
     <button type="button" onClick="{{ save }}" style="min-height: 56px; padding: 0 30px; border: 0; background: #FF6B1A; border-radius: 999px; font: 700 17px Onest, system-ui, sans-serif; color: #17171C; cursor: pointer">Сохранить смету</button>
   </div>
@@ -285,8 +285,8 @@ class Component extends DCLogic {
       showDeps: !saved,
       limits: [
         card('Всего по смете', all, L.total, 'Должно быть ровно ' + this.rub(L.total)),
-        card('Этап 1', s1, L.s1, 'Лимит ' + this.rub(L.s1)),
-        card('Этап 2', s2, L.s2, 'Лимит ' + this.rub(L.s2)),
+        card('Этап 1 · 2 месяца', s1, L.s1, 'Лимит ' + this.rub(L.s1)),
+        card('Этап 2 · 10 месяцев', s2, L.s2, 'Лимит ' + this.rub(L.s2)),
         card('Сторонние исполнители', contr, L.contractor, 'Лимит ' + this.rub(L.contractor) + ' на все работы')
       ],
       hasViolations: !ok, violations: v.map(text => ({ text })),

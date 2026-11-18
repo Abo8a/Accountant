@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>Буха — итог проверки</title>
+<title>Буха — итог</title>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -51,8 +51,7 @@ a{color:#C2410C}a:hover{color:#9A3412}
 <main style="flex: 999 1 640px; min-width: 0; padding: 36px 48px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 28px">
   <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; flex-wrap: wrap">
     <div style="display: flex; flex-direction: column; gap: 8px">
-      <h1 style="margin: 0; font-size: 40px; font-weight: 800; letter-spacing: -0.02em">Итог проверки</h1>
-      <p style="margin: 0; font-size: 16px; color: #52525B">«Студенческий стартап» · проверено 8 ноября 2026 в 14:20</p>
+      <h1 style="margin: 0; font-size: 40px; font-weight: 800; letter-spacing: -0.02em">Итог</h1>
     </div>
     <div role="group" aria-label="Вариант статуса для прототипа" style="display: flex; align-items: center; gap: 4px; background: #F4F4F5; border-radius: 999px; padding: 4px; font-size: 13px">
       <span style="padding: 0 8px; color: #52525B">Прототип:</span>
@@ -75,53 +74,24 @@ a{color:#C2410C}a:hover{color:#9A3412}
 
   <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
     <div style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
-      <section style="border: 1px solid #E4E4E7; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 16px">
-        <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px">
-          <h2 style="margin: 0; font-size: 22px; font-weight: 700">Стоп-факторы</h2>
-          <span style="font-size: 14px; color: #52525B">Блокируют подачу</span>
-        </div>
-        <sc-if value="{{ noStops }}" hint-placeholder-val="{{ true }}">
-          <p style="margin: 0; display: flex; gap: 10px; align-items: center; font-size: 16px; color: #166534"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Формальных стоп-факторов не найдено</p>
-        </sc-if>
-        <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
-          <sc-for list="{{ stops }}" as="s" hint-placeholder-count="0">
-            <li style="display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; background: #FEF2F2; border-radius: 16px">
-              <span style="flex: none; margin-top: 6px; width: 10px; height: 10px; border-radius: 999px; background: #B91C1C"></span>
-              <span style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 16px; line-height: 1.5; color: #7F1D1D">{{ s.text }}</span><sc-if value="{{ s.hasFix }}" hint-placeholder-val="{{ false }}"><span style="font-size: 15px; line-height: 1.5; color: #3F3F46">{{ s.fix }}</span></sc-if></span>
-              <a href="{{ s.href }}" style="flex: none; font-size: 15px; font-weight: 600">{{ s.block }}</a>
-            </li>
-          </sc-for>
-        </ul>
-      </section>
-
-      <section style="border: 1px solid #E4E4E7; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 16px">
-        <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px">
-          <h2 style="margin: 0; font-size: 22px; font-weight: 700">Предупреждения</h2>
-          <span style="font-size: 14px; color: #52525B">Не блокируют, но эксперт спросит</span>
-        </div>
-        <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
-          <sc-for list="{{ warnings }}" as="w" hint-placeholder-count="3">
-            <li style="display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; background: #FFFBEB; border-radius: 16px">
-              <span style="flex: none; margin-top: 6px; width: 10px; height: 10px; border-radius: 999px; background: #D97706"></span>
-              <span style="flex: 1; font-size: 16px; line-height: 1.5; color: #78350F">{{ w.text }}</span>
-              <a href="Passport.dc.html" style="flex: none; font-size: 15px; font-weight: 600">{{ w.block }}</a>
-            </li>
-          </sc-for>
-        </ul>
-      </section>
-
-      <section style="background: #FFF1E8; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <section aria-labelledby="todo-title" style="background: #FFF1E8; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 18px">
         <div style="display: flex; gap: 14px; align-items: center">
           <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="12" fill="#FF6B1A"></rect><path d="M7 7 L12 11 M33 7 L28 11" stroke="#17171C" stroke-width="2.5" stroke-linecap="round"></path><circle cx="13.5" cy="18" r="7" fill="#FFFFFF"></circle><circle cx="26.5" cy="18" r="7" fill="#FFFFFF"></circle><circle cx="15" cy="17" r="3" fill="#17171C"></circle><circle cx="28" cy="17" r="3" fill="#17171C"></circle><path d="M17.5 27 L20 31 L22.5 27 Z" fill="#17171C"></path></svg>
-          <div style="display: flex; flex-direction: column"><h2 style="margin: 0; font-size: 22px; font-weight: 700">Что сделать перед подачей</h2><span style="font-size: 14px; color: #52525B">Сделано {{ doneCount }} из {{ checkTotal }}</span></div>
+          <div style="display: flex; flex-direction: column"><h2 id="todo-title" style="margin: 0; font-size: 22px; font-weight: 700">Что сделать перед подачей</h2><sc-if value="{{ hasTodo }}" hint-placeholder-val="{{ true }}"><span style="font-size: 14px; color: #52525B">Сделано {{ doneCount }} из {{ checkTotal }}</span></sc-if></div>
         </div>
-        <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #3F3F46">Паспорт собран по всем блокам. Ключевые функции MVP и свидетельство на программу подтверждены презентацией. Для допуска нужны документы о статусе обучения и о заявленной выручке, а также сравнение со вторым аналогом.</p>
+        <sc-if value="{{ noTodo }}" hint-placeholder-val="{{ false }}">
+          <p style="margin: 0; display: flex; gap: 10px; align-items: center; padding: 14px 16px; background: #FFFFFF; border-radius: 16px; font-size: 16px; font-weight: 600; color: #166534"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Всё готово: стоп-факторов нет, блоки и смета одобрены аудитом</p>
+        </sc-if>
         <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px">
-          <sc-for list="{{ checklist }}" as="c" hint-placeholder-count="5">
-            <li style="display: flex; gap: 14px; align-items: center; padding: 14px 16px; background: #FFFFFF; border-radius: 16px">
-              <input type="checkbox" checked="{{ c.done }}" onChange="{{ c.toggle }}" aria-label="{{ c.text }}" style="flex: none; width: 22px; height: 22px; margin: 0; accent-color: #FF6B1A">
-              <span style="{{ c.textStyle }}">{{ c.text }}</span>
-              <a href="Passport.dc.html" style="flex: none; font-size: 14px; font-weight: 600">{{ c.block }}</a>
+          <sc-for list="{{ todo }}" as="c" hint-placeholder-count="6">
+            <li style="{{ c.rowStyle }}">
+              <input type="checkbox" checked="{{ c.done }}" onChange="{{ c.toggle }}" aria-label="{{ c.text }}" style="flex: none; margin: 2px 0 0; width: 22px; height: 22px; accent-color: #FF6B1A">
+              <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+                <sc-if value="{{ c.hasTag }}" hint-placeholder-val="{{ false }}"><span style="{{ c.tagStyle }}">{{ c.tag }}</span></sc-if>
+                <span style="{{ c.textStyle }}">{{ c.text }}</span>
+                <sc-if value="{{ c.hasFix }}" hint-placeholder-val="{{ false }}"><span style="font-size: 15px; line-height: 1.5; color: #3F3F46">{{ c.fix }}</span></sc-if>
+              </span>
+              <a href="{{ c.href }}" style="flex: none; font-size: 14px; font-weight: 600">{{ c.block }}</a>
             </li>
           </sc-for>
         </ul>
@@ -133,17 +103,13 @@ a{color:#C2410C}a:hover{color:#9A3412}
         <h2 style="margin: 0; font-size: 20px; font-weight: 700">Насколько паспорт подтверждён</h2>
         <div aria-hidden="true" style="display: flex; height: 16px; border-radius: 999px; overflow: hidden; gap: 2px">
           <span style="flex: 6; background: #15803D"></span>
-          <span style="flex: 3; background: #F59E0B"></span>
-          <span style="flex: 7; background: #3B82F6"></span>
-          <span style="flex: 2; background: #8B5CF6"></span>
-          <span style="flex: 4; background: #A1A1AA"></span>
+          <span style="flex: 7; background: #F59E0B"></span>
+          <span style="flex: 9; background: #3B82F6"></span>
         </div>
         <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px">
-          <li style="display: flex; align-items: center; gap: 10px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #15803D"></span><span style="flex: 1">Факты с документом</span><b>6</b></li>
-          <li style="display: flex; align-items: center; gap: 10px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #F59E0B"></span><span style="flex: 1">Факты без документа</span><b>3</b></li>
-          <li style="display: flex; align-items: center; gap: 10px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #3B82F6"></span><span style="flex: 1">Планы</span><b>7</b></li>
-          <li style="display: flex; align-items: center; gap: 10px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #8B5CF6"></span><span style="flex: 1">Гипотезы</span><b>2</b></li>
-          <li style="display: flex; align-items: center; gap: 10px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #A1A1AA"></span><span style="flex: 1">Со слов команды</span><b>4</b></li>
+          <li style="display: flex; align-items: center; gap: 10px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #15803D"></span><span style="flex: 1">Подтверждено документом</span><b>6</b></li>
+          <li style="display: flex; align-items: center; gap: 10px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #F59E0B"></span><span style="flex: 1">Без документа</span><b>7</b></li>
+          <li style="display: flex; align-items: center; gap: 10px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #3B82F6"></span><span style="flex: 1">Планы и гипотезы</span><b>9</b></li>
         </ul>
         <a href="Passport.dc.html" style="font-size: 15px; font-weight: 600">Открыть паспорт</a>
       </section>
@@ -158,12 +124,7 @@ a{color:#C2410C}a:hover{color:#9A3412}
           </div>
         </sc-if>
         <sc-if value="{{ notReady }}" hint-placeholder-val="{{ true }}">
-          <p style="margin: 0; font-size: 15px; line-height: 1.5; color: #52525B">Скачать можно, когда аудит одобрит все блоки и смету. Осталось:</p>
-          <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px">
-            <sc-for list="{{ notApprovedList }}" as="n" hint-placeholder-count="3">
-              <li style="display: flex; gap: 10px; align-items: center; font-size: 15px"><span style="flex: none; width: 8px; height: 8px; border-radius: 999px; background: #D97706"></span><a href="{{ n.href }}" style="font-weight: 600">{{ n.text }}</a></li>
-            </sc-for>
-          </ul>
+          <p style="margin: 0; font-size: 15px; line-height: 1.5; color: #52525B">Скачать можно, когда будут закрыты все пункты списка «Что сделать перед подачей».</p>
           <div style="display: flex; gap: 10px; flex-wrap: wrap">
             <button type="button" disabled="" style="flex: 1; min-height: 52px; border: 2px solid #E4E4E7; background: #F4F4F5; border-radius: 999px; font: 600 16px Onest, system-ui, sans-serif; color: #A1A1AA; cursor: not-allowed">Скачать DOCX</button>
             <button type="button" disabled="" style="flex: 1; min-height: 52px; border: 2px solid #E4E4E7; background: #F4F4F5; border-radius: 999px; font: 600 16px Onest, system-ui, sans-serif; color: #A1A1AA; cursor: not-allowed">Скачать PDF</button>
@@ -178,7 +139,7 @@ a{color:#C2410C}a:hover{color:#9A3412}
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
 class Component extends DCLogic {
-  constructor(props) { super(props); this.state = { v: 'warn', checks: [true, false, false, false, false] }; }
+  constructor(props) { super(props); this.state = { v: 'warn', checks: { study: true } }; }
   renderVals() {
     const { v, checks } = this.state;
     const heroes = {
@@ -190,13 +151,46 @@ class Component extends DCLogic {
     const h = heroes[v];
     const tOn = 'min-height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: #FFFFFF; font: 600 13px Onest, system-ui, sans-serif; color: #17171C; cursor: pointer';
     const tOff = 'min-height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; font: 500 13px Onest, system-ui, sans-serif; color: #52525B; cursor: pointer';
-    const items = [
-      ['Загрузить справку об обучении в вузе', 'Блок 1'],
-      ['Приложить материалы двух фокус-групп и подтверждение выручки 10 000 ₽', 'Блок 7'],
-      ['Добавить второй аналог и способ измерить отличие', 'Блок 6'],
-      ['Проверить совпадение заявителя и правообладателя по свидетельству РИД', 'Блок 9'],
-      ['Приложить оригинал уведомления о статусе участника Сколково', 'Блок 10']
-    ];
+    // Один список: стоп-факторы, пункты, которые не одобрил аудит, и документы к подаче. По порядку блоков.
+    const P = 'Passport.dc.html', B = 'Budget.dc.html';
+    const STOP = 'stop', AUDIT = 'audit';
+    const pool = {
+      study: { n: 1, block: 'Блок 1', href: P, text: 'Загрузить справку об обучении в вузе — она подтверждает статус обучающегося' },
+      dir: { n: 4, block: 'Блок 4', href: P, kind: STOP, text: 'Выбрать вызов из направления проекта: вызов № 189 относится к Н4, а выбрано Н1' },
+      fatal: { n: 4, block: 'Блоки 4, 6', href: P, kind: STOP, text: 'Нет научно-технической основы: проект описывает перепродажу и сервис без собственной разработки', fix: 'ФСИ поддерживает только технологические проекты. Опишите, что именно команда разрабатывает и какую технологическую задачу решает.' },
+      analog: { n: 6, block: 'Блок 6', href: P, kind: AUDIT, text: 'Добавить второй аналог и способ измерить отличие' },
+      analogStop: { n: 6, block: 'Блок 6', href: P, kind: STOP, text: 'Добавить второй аналог и способ измерить отличие: новизна не подтверждена' },
+      proof: { n: 7, block: 'Блок 7', href: P, text: 'Приложить материалы двух фокус-групп и подтверждение выручки 10 000 ₽' },
+      rid: { n: 9, block: 'Блок 9', href: P, kind: AUDIT, text: 'Проверить совпадение заявителя и правообладателя по свидетельству РИД' },
+      sk: { n: 10, block: 'Блок 10', href: P, text: 'Приложить оригинал уведомления о статусе участника Сколково' },
+      budget: { n: 99, block: 'Смета', href: B, kind: AUDIT, text: 'Исправить смету по замечаниям аудита' },
+      budgetStop: { n: 99, block: 'Смета', href: B, kind: STOP, text: 'Уменьшить расходы 1-го этапа: сейчас 25 000 ₽, лимит — 20 000 ₽' }
+    };
+    const sets = {
+      ok: [],
+      warn: ['study', 'analog', 'proof', 'rid', 'sk', 'budget'],
+      bad: ['study', 'dir', 'analogStop', 'proof', 'rid', 'sk', 'budgetStop'],
+      fatal: ['fatal']
+    };
+    const tags = {
+      stop: ['Стоп-фактор', 'background: #FEE2E2; color: #991B1B'],
+      audit: ['Не одобрено аудитом', 'background: #FEF3C7; color: #92400E']
+    };
+    const ids = sets[v].slice().sort((a, b) => pool[a].n - pool[b].n);
+    const todo = ids.map(id => {
+      const it = pool[id];
+      const done = !!checks[id];
+      const tag = it.kind ? tags[it.kind] : null;
+      return {
+        text: it.text, block: it.block, href: it.href, done,
+        hasFix: !!it.fix, fix: it.fix || '',
+        hasTag: !!tag, tag: tag ? tag[0] : '',
+        tagStyle: 'align-self: flex-start; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 999px; ' + (tag ? tag[1] : ''),
+        rowStyle: 'display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px; border-radius: 16px; background: ' + (it.kind === STOP ? '#FEF2F2' : '#FFFFFF'),
+        textStyle: 'font-size: 15px; line-height: 1.45; ' + (done ? 'color: #71717A; text-decoration: line-through' : (it.kind === STOP ? 'color: #7F1D1D; font-weight: 500' : 'color: #27272A')),
+        toggle: () => { const c = Object.assign({}, checks); c[id] = !c[id]; this.setState({ checks: c }); }
+      };
+    });
     return {
       variants: [['ok', 'Допуск'], ['warn', 'Уточнить'], ['bad', 'Стоп'], ['fatal', 'Тема']].map(([id, label]) => ({ label, style: v === id ? tOn : tOff, pick: () => this.setState({ v: id }) })),
       hero: {
@@ -205,28 +199,10 @@ class Component extends DCLogic {
         box: 'display: flex; flex-wrap: wrap; gap: 24px; align-items: center; padding: 32px; border-radius: 28px; background: ' + h.bg,
         iconBox: 'flex: none; width: 72px; height: 72px; border-radius: 22px; display: inline-flex; align-items: center; justify-content: center; background: ' + h.ic
       },
-      noStops: v === 'ok' || v === 'warn',
-      stops: v === 'fatal' ? [
-        { text: 'Нет научно-технической основы: проект описывает перепродажу и сервис без собственной разработки.', fix: 'ФСИ поддерживает только технологические проекты. Опишите, что именно команда разрабатывает и какую технологическую задачу решает.', hasFix: true, block: 'Блоки 4, 6', href: 'Passport.dc.html' }
-      ] : (v === 'bad' ? [
-        { text: 'Новизна не подтверждена: указан 1 аналог из 2, нет измеримого отличия.', fix: '', hasFix: false, block: 'Блок 6', href: 'Passport.dc.html' },
-        { text: 'Смета: расходы 1-го этапа составляют 25 000 ₽, лимит — 20 000 ₽.', fix: '', hasFix: false, block: 'Смета', href: 'Budget.dc.html' },
-        { text: 'Направление и вызов: технологический вызов № 189 относится к направлению Н4, а выбрано Н1.', fix: '', hasFix: false, block: 'Блок 4', href: 'Passport.dc.html' }
-      ] : []),
-      warnings: v === 'ok' ? [] : [
-        { text: 'Для «Студенческого стартапа» нужно подтвердить статус обучающегося.', block: 'Блок 1' },
-        { text: 'В паспорте 3 факта без подтверждающих документов.', block: 'Блоки 7, 10' },
-        { text: 'Проверка новизны пропущена после двух попыток.', block: 'Блок 6' }
-      ],
-      checklist: items.map(([text, block], i) => ({
-        text, block, done: checks[i],
-        textStyle: 'flex: 1; font-size: 15px; line-height: 1.45; ' + (checks[i] ? 'color: #71717A; text-decoration: line-through' : 'color: #27272A'),
-        toggle: () => { const c = checks.slice(); c[i] = !c[i]; this.setState({ checks: c }); }
-      })),
-      doneCount: checks.filter(Boolean).length,
-      checkTotal: items.length,
-      exportReady: v === 'ok', notReady: v !== 'ok',
-      notApprovedList: [['Блок 6 · Аналоги', 'Passport.dc.html'], ['Блок 9 · Права и РИД', 'Passport.dc.html'], ['Смета', 'Budget.dc.html']].map(([text, href]) => ({ text, href }))
+      todo, hasTodo: todo.length > 0, noTodo: todo.length === 0,
+      doneCount: todo.filter(t => t.done).length,
+      checkTotal: todo.length,
+      exportReady: v === 'ok', notReady: v !== 'ok'
     };
   }
 }

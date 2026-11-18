@@ -97,7 +97,6 @@ a{color:#C2410C}a:hover{color:#9A3412}
       </div>
     </sc-for>
     <button type="button" onClick="{{ addFile }}" style="border: 2px dashed #FDBA8C; background: #FFFAF6; border-radius: 18px; padding: 26px; display: flex; align-items: center; justify-content: center; gap: 12px; font: 600 17px Onest, system-ui, sans-serif; color: #17171C; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#C2410C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"></path><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path></svg>Перетащите файлы сюда или <span style="color: #C2410C; text-decoration: underline">загрузите с устройства</span></button>
-    <p style="margin: 4px 0 0; font-size: 14px; color: #71717A; line-height: 1.5">Добавлять можно только материалы по проекту Monetrix: файлы о другом проекте система не примет.</p>
   </section>
 </main>
 
@@ -166,7 +165,7 @@ class Component extends DCLogic {
     const { files, preview, confirm, toast } = this.state;
     const total = files.reduce((s, f) => s + f.mb, 0);
     const extStyle = { pdf: ['#FEE2E2', '#B91C1C'], scan: ['#DBEAFE', '#1D4ED8'], docx: ['#E0E7FF', '#3730A3'] };
-    const status = (f) => f.st === 'parsing' ? ['Разбираем…', '#F4F4F5', '#3F3F46'] : [(f.st === 'ocr' ? 'Скан распознан · ' : '') + this.claimsWord(f.claims), '#DCFCE7', '#166534'];
+    const status = (f) => f.st === 'parsing' ? ['Разбираем…', '#F4F4F5', '#3F3F46'] : [this.claimsWord(f.claims), '#DCFCE7', '#166534'];
     const pv = files.find(f => f.id === preview);
     const cf = files.find(f => f.id === confirm);
     const toasts = {
