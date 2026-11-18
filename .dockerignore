@@ -5,6 +5,8 @@
 **/outbox
 **/.pytest_cache
 **/__pycache__
+# Локальная PGlite-база разработчика (RAG) — в образ не попадает; в контейнере RAG живёт в Postgres.
+backend/pipeline-api/data/pgdata
 design
 docs
 scratchpad

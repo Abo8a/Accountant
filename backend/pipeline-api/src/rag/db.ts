@@ -55,7 +55,8 @@ CREATE INDEX IF NOT EXISTS idx_rag_cards_direction ON rag_knowledge_cards (direc
 CREATE INDEX IF NOT EXISTS idx_rag_cards_source_doc ON rag_knowledge_cards (source_doc);
 `;
 
-let isPostgresUnavailable = false;
+/** Время на подключение к Postgres. Раньше 500 мс: при кратком подтормаживании БД процесс уходил в пустой PGlite. */
+const PG_CONNECT_TIMEOUT_MS = 5_000;
 
 let sharedPglite: PGlite | null = null;
 let pgliteInitPromise: Promise<PGlite> | null = null;
@@ -81,25 +82,26 @@ async function getOrCreateSharedPglite(): Promise<PGlite> {
   return pgliteInitPromise;
 }
 
+/**
+ * База знаний RAG. Если задан Postgres (SUPABASE_DB_URL / DATABASE_URL) — только он: при ошибке подключения
+ * бросаем исключение (вызывающие логируют и продолжают без RAG). Раньше первая же ошибка навсегда переключала
+ * процесс на локальный PGlite, который в контейнере пуст, и RAG молча пропадал до перезапуска.
+ * PGlite (backend/pipeline-api/data/pgdata) — только для локальной разработки без Postgres.
+ */
 export async function getRagDb(overrideUrl?: string): Promise<RagDbInstance> {
   const dbUrl = overrideUrl || config.databaseUrl;
 
-  const shouldAttemptPg = dbUrl && (overrideUrl || !isPostgresUnavailable);
-
-  if (shouldAttemptPg) {
+  if (dbUrl) {
+    const pool = new Pool({
+      connectionString: dbUrl,
+      connectionTimeoutMillis: PG_CONNECT_TIMEOUT_MS,
+    });
     try {
-      const pool = new Pool({
-        connectionString: dbUrl,
-        connectionTimeoutMillis: 500,
-      });
-      // Test connectivity
       const testClient = await pool.connect();
       testClient.release();
 
       const sql = fromPgPool(pool);
       await sql.exec(MIGRATION_SQL);
-
-      isPostgresUnavailable = false;
 
       return {
         sql,
@@ -109,16 +111,12 @@ export async function getRagDb(overrideUrl?: string): Promise<RagDbInstance> {
         },
       };
     } catch (err: any) {
-      if (!overrideUrl) {
-        isPostgresUnavailable = true;
-      }
-      console.warn(
-        `[ragDb] PostgreSQL connection to ${dbUrl} failed (${err?.message || err}). Falling back to local persistent PGlite.`
-      );
+      await pool.end().catch(() => {});
+      throw new Error(`[ragDb] PostgreSQL недоступен: ${err?.message || err}`);
     }
   }
 
-  // Fallback to local persistent PGlite in backend/pipeline-api/data/pgdata
+  // Локальная разработка без Postgres: PGlite в backend/pipeline-api/data/pgdata
   const pglite = await getOrCreateSharedPglite();
   const sql = fromPglite(pglite);
 

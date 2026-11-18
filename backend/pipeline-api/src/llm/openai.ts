@@ -23,7 +23,7 @@ export interface LlmTaskParams {
  * Глубина рассуждений и температура по задаче.
  * audit, validate_answer, novelty — high; extract — medium;
  * consultant — без размышлений, пока в input не включён thinking (тогда medium);
- * anchor, navigator — быстрые, без размышлений.
+ * screen — low; anchor, navigator — быстрые, без размышлений.
  */
 export function resolveLlmParams(task: LlmTask, input?: unknown): LlmTaskParams {
   switch (task) {
@@ -33,6 +33,9 @@ export function resolveLlmParams(task: LlmTask, input?: unknown): LlmTaskParams 
       return { reasoningEffort: 'high', temperature: 0.1 };
     case 'extract':
       return { reasoningEffort: 'medium', temperature: 0.1 };
+    // Ранняя проверка стоп-факторов по брифу: короткий вход, ответ «да/нет» — глубокие рассуждения не нужны
+    case 'screen':
+      return { reasoningEffort: 'low', temperature: 0.1 };
     case 'consultant':
       return Boolean((input as Record<string, unknown> | null | undefined)?.thinking) === true
         ? { reasoningEffort: 'medium', temperature: 0.3 }
@@ -85,7 +88,7 @@ export class OpenAiClient implements LlmClient {
         return await callKimi(callOptions);
       }
 
-      // Канал 1 (OpenCode Go - DeepSeek): 'anchor', 'extract', 'novelty', 'consultant' (и 'navigator' для обратной совместимости)
+      // Канал 1 (OpenCode Go - DeepSeek): 'anchor', 'screen', 'extract', 'novelty', 'consultant' (и 'navigator' для обратной совместимости)
       return await callDeepSeek(callOptions);
     } catch (err: any) {
       throw new PipelineFailure('INTERNAL', `LLM (${task}): ${err?.message ?? err}`);

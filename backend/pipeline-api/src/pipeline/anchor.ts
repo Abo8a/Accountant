@@ -9,7 +9,15 @@ import type { PipelineDeps } from './deps';
 import { OPTIONAL_FIELDS } from './fieldValidation';
 
 export const GUARD_QUERY_MAX_CHARS = 5_000;
-const ANCHOR_SECTION_IDS = [3, 4];
+export const ANCHOR_SECTION_IDS = [3, 4];
+
+/**
+ * Секции, ответы по которым сверяются с якорем (anti-fraud guard). Якорь — текст блоков 3 и 4, поэтому
+ * сравнивать с ним осмысленно только их. Замер 18.11.2026 (qwen3-embedding-8b): честные ответы блоков 7–10
+ * дают сходство 0.26–0.48 при пороге 0.5 — то есть блокировались бы все. Подмену проекта ловит guard
+ * на новых брифах и файлах (init_or_upload).
+ */
+export const GUARDED_ANSWER_SECTIONS: ReadonlySet<number> = new Set(ANCHOR_SECTION_IDS);
 /** Поля-коды (направление, номер вызова) короче текста — в тексте якоря не нужны. */
 const ANCHOR_SKIP_FIELDS = new Set(['4/direction', '4/tech_challenge']);
 const MIN_ANCHOR_FIELD_LENGTH = 10;

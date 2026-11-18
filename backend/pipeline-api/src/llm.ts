@@ -15,9 +15,14 @@ export interface LLMCallOptions {
   maxTokens?: number;
 }
 
-/** Таймаут одного HTTP-вызова модели и число повторов SDK на 429/5xx/сетевые сбои. */
-const LLM_TIMEOUT_MS = 120_000;
-const LLM_MAX_RETRIES = 2;
+/**
+ * Таймаут одного HTTP-вызова модели и число повторов SDK на 429/5xx/сетевые сбои.
+ * Замер 18.11.2026 (deepseek-v4.1-flash, полный паспорт): extract 204–216 с, audit 165–222 с; kimi-k3 audit 119–132 с.
+ * При 120 с эти шаги падали всегда. Повтор SDK срабатывает и на таймауте, поэтому повторов — один:
+ * иначе пользователь ждёт 3× таймаута, а каждая попытка оплачивается.
+ */
+export const LLM_TIMEOUT_MS = 360_000;
+const LLM_MAX_RETRIES = 1;
 /** Сколько раз пробовать, если модель вернула пустой или битый JSON (сеть — отдельно, см. maxRetries). */
 const JSON_ATTEMPTS = 3;
 

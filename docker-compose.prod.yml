@@ -11,6 +11,10 @@ services:
     build: !reset null
     image: ${IMAGE_PIPELINE:?}
 
+  rag-seed:
+    build: !reset null
+    image: ${IMAGE_PIPELINE:?}
+
   parser:
     build: !reset null
     image: ${IMAGE_PARSER:?}

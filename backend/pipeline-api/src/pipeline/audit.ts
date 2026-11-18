@@ -6,17 +6,27 @@ import {
   type FatalStopFactorOut,
 } from '@passport/contracts';
 import { checkBudget } from '@passport/passport-core';
-import { callLlm, auditOutputSchema, type AuditOutput } from '../llm/schemas';
+import { callLlm, auditOutputSchema, noveltyVerdict, type AuditOutput } from '../llm/schemas';
 import { wrapUntrustedData } from '../promptGuard';
+import { fieldKb } from '../kb/manifest';
 import { challengeDirectionMismatch, DIRECTION_CODES } from './fieldValidation';
 import { getRagDb } from '../rag/db';
 import { retrieveRagContext } from '../rag/retriever';
 import type { DirectionCode } from '../rag/types';
 import type { PipelineDeps } from './deps';
+import type { BudgetRow, RecordRow } from '../db/store';
+import { createHash } from 'node:crypto';
 
 const CODE_FIELDS = new Set(['4/direction', '4/tech_challenge']);
 const OPTIONAL_FIELDS = new Set(['4/tech_challenge']);
 const MIN_FIELD_LENGTH = 10;
+
+/** Слепок паспорта на момент аудита: по нему следующий запрос видит, что изменилось (шаг 6.1). */
+export interface AuditFingerprint {
+  /** «секция/поле» → «статус|хеш значения». */
+  fields: Record<string, string>;
+  budget: string;
+}
 
 export interface AuditReport {
   mode: 'primary_audit' | 'delta_reaudit';
@@ -25,12 +35,56 @@ export interface AuditReport {
   budget_audit: BudgetAuditOut;
   novelty_audit?: AuditOutput['novelty_audit'];
   created_at: string;
+  fingerprint?: AuditFingerprint;
 }
 
-export async function auditPassport(deps: PipelineDeps, projectId: string): Promise<AuditReport> {
+/**
+ * Точечный ре-аудит (6.1): какие открытые блоки проверить заново и нужна ли проверка сметы.
+ * Остальные неодобренные блоки сохраняют вердикт прошлого аудита (previous) и идут в модель только как контекст.
+ */
+export interface AuditScope {
+  sections: ReadonlySet<number>;
+  budget: boolean;
+  previous: AuditReport;
+}
+
+const hash = (s: string) => createHash('sha1').update(s).digest('hex').slice(0, 16);
+
+/** limits — действующая редакция лимитов сметы: её смена тоже повод перепроверить смету. */
+export function auditFingerprint(records: readonly RecordRow[], budgetItems: readonly BudgetRow[], limits: unknown): AuditFingerprint {
+  const fields: Record<string, string> = {};
+  for (const s of PASSPORT_SECTIONS) {
+    for (const f of s.fields) {
+      const rec = records.find((r) => r.section_id === s.id && r.field_key === f);
+      // «статус|хеш значения»: отличаем правку текста от разморозки связанного блока (меняется только статус)
+      fields[`${s.id}/${f}`] = `${rec?.review_status ?? 'none'}|${hash(rec?.value ?? '')}`;
+    }
+  }
+  const budget = hash(
+    JSON.stringify([
+      budgetItems.map((b) => [b.stage, b.category, b.title, b.quantity, b.unit_price, b.amount, b.justification, b.review_status]),
+      limits,
+    ]),
+  );
+  return { fields, budget };
+}
+
+/** Последний сохранённый отчёт аудита (служебная секция 0) или null. */
+export function loadAuditReport(records: readonly RecordRow[]): AuditReport | null {
+  const raw = records.find((r) => r.section_id === 0 && r.field_key === 'latest_audit_report')?.value;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuditReport;
+  } catch {
+    return null;
+  }
+}
+
+export async function auditPassport(deps: PipelineDeps, projectId: string, scope?: AuditScope): Promise<AuditReport> {
   const records = await deps.store.getRecords(projectId);
   const budgetItems = await deps.store.getBudgetItems(projectId);
   const limits = await deps.store.getBudgetLimits();
+  const budgetInScope = !scope || scope.budget;
 
   // 1. Определение режима (primary vs delta) и разделение блоков
   const lockedSections: typeof PASSPORT_SECTIONS[number][] = [];
@@ -52,10 +106,17 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
     }
   }
 
+  // Точечный ре-аудит: заново проверяем только блоки из scope. Прочие открытые блоки ждут правок студента —
+  // их вердикт прошлого аудита остаётся в силе, в модель они идут только как контекст (pending_blocks).
+  const auditSections = scope ? openSections.filter((s) => scope.sections.has(s.id)) : openSections;
+  const pendingSections = scope ? openSections.filter((s) => !scope.sections.has(s.id)) : [];
+  const auditIds = new Set(auditSections.map((s) => s.id));
+  const auditBudgetItems = budgetInScope ? budgetItems : [];
+
   // 2. Детерминированные проверки кодом до вызова Kimi (code_warnings)
   const codeWarnings: string[] = [];
 
-  for (const s of openSections) {
+  for (const s of auditSections) {
     const emptyFields: string[] = [];
     for (const f of s.fields) {
       if (OPTIONAL_FIELDS.has(`${s.id}/${f}`)) continue;
@@ -71,22 +132,22 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
   }
 
   const budgetErrors = budgetItems.length > 0 ? checkBudget(budgetItems, limits) : [];
-  for (const err of budgetErrors) {
+  for (const err of budgetInScope ? budgetErrors : []) {
     codeWarnings.push(`Смета: ${err.message}`);
   }
-  if (budgetItems.some((b) => b.review_status === 'needs_review')) {
+  if (budgetInScope && budgetItems.some((b) => b.review_status === 'needs_review')) {
     codeWarnings.push('Смета: связанные блоки изменились. Подтвердите смету заново.');
   }
 
   const direction = records.find((r) => r.section_id === 4 && r.field_key === 'direction')?.value ?? null;
   const challenge = records.find((r) => r.section_id === 4 && r.field_key === 'tech_challenge')?.value ?? null;
   const mismatch = challengeDirectionMismatch(direction, challenge, deps.kb.tech_challenges);
-  if (mismatch) {
+  if (mismatch && auditIds.has(4)) {
     codeWarnings.push(`Направление и вызов: ${mismatch}`);
   }
 
   for (const r of records) {
-    if (r.section_id < 2) continue;
+    if (r.section_id < 2 || !auditIds.has(r.section_id)) continue;
     for (const c of r.claims) {
       if (c.claim_type === 'fact' && c.verification_status === 'unverified') {
         codeWarnings.push(`Неподтверждённый факт в Блоке ${r.section_id} (${r.field_key}): "${c.claim_text.slice(0, 80)}"`);
@@ -95,19 +156,19 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
   }
 
   // 3. Подтягивание контекста из RAG (step: 'audit')
-  const openSectionIds = openSections.map((s) => String(s.id));
-  const targetBlockIds = Array.from(new Set([...openSectionIds, ...(budgetItems.length > 0 ? ['5', '7'] : [])]));
+  const openSectionIds = auditSections.map((s) => String(s.id));
+  const targetBlockIds = Array.from(new Set([...openSectionIds, ...(auditBudgetItems.length > 0 ? ['5', '7'] : [])]));
 
   const rawDirection = (direction ?? '').trim();
   const knownDirection: DirectionCode = (DIRECTION_CODES as readonly string[]).includes(rawDirection)
     ? (rawDirection as DirectionCode)
     : 'all';
 
-  const openTexts = openSections
+  const openTexts = auditSections
     .flatMap((s) => s.fields.map((f) => records.find((r) => r.section_id === s.id && r.field_key === f)?.value ?? ''))
     .filter(Boolean)
     .join(' ');
-  const budgetTexts = budgetItems.map((b) => `${b.title} ${b.justification}`).join(' ');
+  const budgetTexts = auditBudgetItems.map((b) => `${b.title} ${b.justification}`).join(' ');
   const queryText = [openTexts, budgetTexts, codeWarnings.join(' ')].filter(Boolean).join(' ').slice(0, 2000);
 
   let ragContextText = '';
@@ -131,14 +192,14 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
   }
 
   // 4. Пакетный вызов Kimi
-  const hasFilledOpenField = openSections.some((s) =>
+  const hasFilledOpenField = auditSections.some((s) =>
     s.fields.some((f) => {
       const rec = records.find((r) => r.section_id === s.id && r.field_key === f);
       return !!rec?.value && rec.value.trim().length > 0;
     }),
   );
-  const hasBudget = budgetItems.length > 0;
-  const mode = lockedSections.length > 0 ? 'delta_reaudit' : 'primary_audit';
+  const hasBudget = auditBudgetItems.length > 0;
+  const mode = lockedSections.length > 0 || scope ? 'delta_reaudit' : 'primary_audit';
 
   let auditOutput: AuditOutput;
   if (hasFilledOpenField || hasBudget) {
@@ -147,13 +208,15 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
       'audit',
       {
         mode,
-        open_blocks: openSections.map((s) => ({
+        open_blocks: auditSections.map((s) => ({
           section_id: s.id,
           fields: s.fields.map((f) => {
             const rec = records.find((r) => r.section_id === s.id && r.field_key === f);
             const val = rec?.value ?? null;
             return {
               field_key: f,
+              // Мерило одобрения поля — тот же критерий базы знаний, что и у валидатора ответа
+              criteria: fieldKb(deps.kb, s.id, f).criteria,
               value: val ? wrapUntrustedData(`field:${s.id}/${f}`, val) : null,
               review_status: rec?.review_status ?? 'draft',
               claims: (rec?.claims ?? []).map((c) => ({
@@ -171,7 +234,15 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
             value: records.find((r) => r.section_id === s.id && r.field_key === f)?.value ?? null,
           })),
         })),
-        budget_items: budgetItems.map((b) => ({
+        // Блоки с замечаниями прошлого аудита, которые студент ещё не исправил: только контекст, не оценивать
+        pending_blocks: pendingSections.map((s) => ({
+          section_id: s.id,
+          fields: s.fields.map((f) => {
+            const val = records.find((r) => r.section_id === s.id && r.field_key === f)?.value ?? null;
+            return { field_key: f, value: val ? wrapUntrustedData(`field:${s.id}/${f}`, val) : null };
+          }),
+        })),
+        budget_items: auditBudgetItems.map((b) => ({
           stage: b.stage,
           category: b.category,
           title: b.title,
@@ -188,7 +259,7 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
   } else {
     auditOutput = {
       fatal_stop_factors: [],
-      block_audits: openSections.map((s) => ({
+      block_audits: auditSections.map((s) => ({
         section_id: s.id,
         status: 'needs_revision',
         remark: `Блок ${s.id} не заполнен.`,
@@ -215,6 +286,13 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
     how_to_fix: f.how_to_fix,
     affected_sections: f.affected_sections?.length ? f.affected_sections : [3, 4],
   }));
+  // Стоп-фактор прошлого аудита по блокам, которые сейчас не перепроверялись, остаётся в силе
+  if (scope) {
+    for (const f of scope.previous.fatal_stop_factors ?? []) {
+      if (f.affected_sections.some((s) => auditIds.has(s))) continue;
+      if (!fatalStopFactorsOut.some((x) => x.code === f.code)) fatalStopFactorsOut.push(f);
+    }
+  }
 
   const fatalSections = new Set<number>();
   for (const f of fatalStopFactorsOut) {
@@ -233,10 +311,11 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
     }
   }
 
+  const novelty = noveltyVerdict(auditOutput.novelty_audit, deps.kb.rules.min_analogues);
   const finalBlockAudits: BlockAuditOut[] = [];
   const sectionsToApprove: number[] = [];
 
-  for (const s of openSections) {
+  for (const s of auditSections) {
     const emptyFields: string[] = [];
     for (const f of s.fields) {
       if (OPTIONAL_FIELDS.has(`${s.id}/${f}`)) continue;
@@ -250,13 +329,8 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
     const kimiAudit = auditOutput.block_audits.find((b) => b.section_id === s.id);
     const isFatal = fatalSections.has(s.id);
     const hasMismatch = s.id === 4 && !!mismatch;
-    const noveltyPassed = s.id === 6
-      ? (auditOutput.novelty_audit
-          ? auditOutput.novelty_audit.passed !== false &&
-            auditOutput.novelty_audit.analogues_count >= 2 &&
-            auditOutput.novelty_audit.has_measurable_comparison
-          : true)
-      : true;
+    // Вердикт новизны неизвестен (модель не дала счёт аналогов) — блок 6 решается по его block_audits.
+    const noveltyPassed = s.id === 6 ? (novelty.known ? novelty.passed : true) : true;
 
     const canApprove =
       emptyFields.length === 0 &&
@@ -323,6 +397,23 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
     await deps.store.approveSectionFields(projectId, sectionsToApprove);
   }
 
+  // Блоки, ждущие правок студента: вердикт прошлого аудита без изменений
+  for (const s of pendingSections) {
+    const prev = scope?.previous.block_audits.find((b) => b.section_id === s.id);
+    finalBlockAudits.push({
+      section_id: s.id,
+      status: 'needs_review',
+      remark: prev?.remark ?? null,
+      how_to_fix: prev?.how_to_fix ?? null,
+      failed_fields: prev?.failed_fields?.length
+        ? prev.failed_fields
+        : s.fields.filter((f) => {
+            const rec = records.find((r) => r.section_id === s.id && r.field_key === f);
+            return !OPTIONAL_FIELDS.has(`${s.id}/${f}`) && (!rec?.value?.trim() || rec.review_status === 'needs_review');
+          }),
+    });
+  }
+
   // Обработка ранее заблокированных секций (locked)
   for (const s of lockedSections) {
     if (fatalSections.has(s.id)) {
@@ -349,7 +440,10 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
 
   // Смысловая проверка сметы (budget_audit)
   let budgetAuditOut: BudgetAuditOut;
-  if (budgetItems.length === 0) {
+  if (!budgetInScope && scope) {
+    // Смета не менялась с прошлого аудита — её вердикт в силе
+    budgetAuditOut = scope.previous.budget_audit;
+  } else if (budgetItems.length === 0) {
     budgetAuditOut = {
       status: 'not_provided',
       remark: null,
@@ -391,8 +485,10 @@ export async function auditPassport(deps: PipelineDeps, projectId: string): Prom
     fatal_stop_factors: fatalStopFactorsOut,
     block_audits: finalBlockAudits,
     budget_audit: budgetAuditOut,
-    novelty_audit: auditOutput.novelty_audit,
+    novelty_audit: scope && !auditIds.has(6) ? scope.previous.novelty_audit : auditOutput.novelty_audit,
     created_at: new Date().toISOString(),
+    // Слепок после записи вердиктов: следующий запрос по нему поймёт, что студент изменил с этого аудита
+    fingerprint: auditFingerprint(await deps.store.getRecords(projectId), await deps.store.getBudgetItems(projectId), limits),
   };
 
   // Сохраняем сводный JSON отчёта аудита в служебную секцию 0

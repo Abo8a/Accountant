@@ -26,6 +26,34 @@ const CODE_FIELDS = new Set(['4/direction', '4/tech_challenge']);
 /** Необязательные поля: не попадают в пробелы. Технологический вызов пока необязателен для всех направлений (решение владельца). */
 const OPTIONAL_FIELDS = new Set(['4/tech_challenge']);
 
+/**
+ * Служебные пометки экстрактора («сведения не предоставлены», «требует уточнения», «со слов автора»).
+ * Это комментарий к пробелу, а не текст паспорта: с ним поле выглядит заполненным, досбор не срабатывает, а фраза уходит в DOCX.
+ */
+const META_STUB_RE = new RegExp(
+  [
+    'не\\s+(?:предоставлен|представлен|раскрыт)',
+    'не\\s+указан[аоы]?\\s+(?:в\\s|заявител|автор|студент)',
+    'в\\s+(?:предоставленных|исходных|представленных)\\s+(?:сведениях|материалах|данных|документах)',
+    'требу(?:ет|ют)\\s+(?:уточнения|проверки|дополнительного)',
+    'со\\s+слов\\s+(?:автора|заявителя|клиента|студента|команды)',
+    'по\\s+словам\\s+(?:автора|заявителя|клиента|студента)',
+    'сведени[яй]\\s.{0,60}отсутству',
+  ].join('|'),
+  'i',
+);
+
+/** Убирает предложения-заглушки. Возвращает null, если содержательного текста не осталось. */
+export function stripMetaStubs(value: string): string | null {
+  if (!META_STUB_RE.test(value)) return value;
+  const kept = value
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => !META_STUB_RE.test(sentence))
+    .join(' ')
+    .trim();
+  return kept.length > MIN_FIELD_LENGTH ? kept : null;
+}
+
 /** Записывает claims поля: спаны (0-based), аудит источников, атомарная замена в БД. */
 export async function writeClaims(
   deps: PipelineDeps,
@@ -265,8 +293,16 @@ export async function extractPassport(
     );
     if (!isExplicitForm && existingRec?.review_status === 'approved') continue;
 
-    const raw = item.value?.trim();
-    if (!raw) continue;
+    const trimmed = item.value?.trim();
+    if (!trimmed) continue;
+    // Заглушка вместо сведений = пустое поле (досбор спросит студента); у кодов направления и вызова заглушек не бывает
+    const raw = isCodeField(item.section_id, item.field_key) ? trimmed : stripMetaStubs(trimmed);
+    if (!raw) {
+      deps.logger.info(`[extract] ${item.section_id}/${item.field_key}: служебная заглушка вместо сведений — поле оставлено пустым`);
+      continue;
+    }
+    // Утверждения, чей текст ушёл вместе с вырезанными предложениями, не сохраняем
+    if (raw !== trimmed) item.claims = (item.claims ?? []).filter((c) => raw.includes(c.claim_text));
 
     // Поля с допустимым набором (направление, вызов): невалидное значение от модели пропускаем
     const check = checkFieldValue(item.section_id, item.field_key, raw, deps.kb.tech_challenges);
@@ -442,8 +478,14 @@ export async function answerField(
   const code = checkFieldValue(target.section_id, target.field_key, value, deps.kb.tech_challenges);
   if (!code.ok) return { ok: false, reason: code.reason };
 
-  // Claims из ответа клиента — без привязки к файлам.
-  const claims: LlmClaim[] = out.claims.map((c) => ({ ...c, source_id: null, source_locator: null }));
+  // Claims из ответа клиента — без привязки к файлам, поэтому «fact» здесь невозможен: это слова клиента.
+  // Иначе аудит получал предупреждение «Неподтверждённый факт» на ответах вида «ООО пока нет».
+  const claims: LlmClaim[] = out.claims.map((c) => ({
+    ...c,
+    claim_type: c.claim_type === 'fact' ? 'client_statement' : c.claim_type,
+    source_id: null,
+    source_locator: null,
+  }));
   const recordId = await deps.store.upsertField(projectId, target.section_id, target.field_key, code.value);
   await writeClaims(deps, recordId, code.value, claims, {}, new Set());
   return { ok: true };

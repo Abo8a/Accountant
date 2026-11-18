@@ -63,6 +63,28 @@ services:
           memory: ${MEM_DBMIGRATE:?}
     logging: *logging
 
+  rag-seed:
+    # База знаний RAG: 62 карточки + 357 технологических вызовов с эмбеддингами (EMBEDDING_* из .env).
+    # Повторный запуск векторизует только новые и изменённые карточки (сверка по content_hash).
+    # pipeline от него не зависит: при сбое сидирования API работает, но без RAG — смотрите логи этого сервиса.
+    build:
+      context: .
+      dockerfile: backend/pipeline-api/Dockerfile
+    command: ["npx", "tsx", "scripts/seed-rag.ts"]
+    env_file: .env
+    environment:
+      SUPABASE_DB_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: ${CPU_DBMIGRATE:?}
+          memory: ${MEM_DBMIGRATE:?}
+    logging: *logging
+
   parser:
     build: ./backend/parser-service
     restart: unless-stopped

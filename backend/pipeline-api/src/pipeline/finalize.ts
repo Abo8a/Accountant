@@ -2,7 +2,7 @@
 import { PASSPORT_SECTIONS, type PipelineCompleted, type PipelineQuestion, type PipelinePassportField } from '@passport/contracts';
 import { checkBudget, evaluatePassportRules, type AuditableClaim } from '@passport/passport-core';
 import { fieldKb } from '../kb/manifest';
-import { callLlm, noveltySchema } from '../llm/schemas';
+import { callLlm, noveltySchema, noveltyVerdict } from '../llm/schemas';
 import { wrapUntrustedData } from '../promptGuard';
 import type { BudgetRow, RecordRow, UserContext } from '../db/store';
 import type { PipelineDeps } from './deps';
@@ -138,7 +138,9 @@ export async function noveltyAndFinalize(
     let missingQuestion: string | null | undefined;
     let analoguesCount: number;
 
-    if (hasNoveltyOverride || !auditReport?.novelty_audit) {
+    const fromAudit = noveltyVerdict(auditReport?.novelty_audit, rules.min_analogues);
+
+    if (hasNoveltyOverride || !fromAudit.known) {
       const res = await callLlm(
         deps.llm,
         'novelty',
@@ -156,10 +158,9 @@ export async function noveltyAndFinalize(
       passed = res.analogues_count >= rules.min_analogues && res.has_measurable_comparison;
       missingQuestion = res.missing_details_question;
     } else {
-      const na = auditReport.novelty_audit;
-      analoguesCount = na.analogues_count;
-      passed = na.passed !== false && na.analogues_count >= rules.min_analogues && na.has_measurable_comparison;
-      missingQuestion = na.how_to_fix ?? na.remark;
+      analoguesCount = fromAudit.analogues_count;
+      passed = fromAudit.passed;
+      missingQuestion = fromAudit.question;
     }
 
     if (!passed) {

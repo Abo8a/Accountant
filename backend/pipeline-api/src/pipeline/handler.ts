@@ -10,11 +10,12 @@ import type { UserContext } from '../db/store';
 import { ingestFiles } from './intake';
 import type { PipelineDeps } from './deps';
 import { answerField, extractPassport } from './passport';
-import { GUARD_QUERY_MAX_CHARS } from './anchor';
+import { GUARD_QUERY_MAX_CHARS, GUARDED_ANSWER_SECTIONS } from './anchor';
 import { gateEligibility } from './eligibility';
 import { handleSubmitForm } from './form';
 import { nextStep, skippedKeys } from './next';
 import { LoggedLlm } from '../llm/logged';
+import { screenStopFactors, stopFactorBriefQuestion } from './screen';
 
 const SHORT_ANSWER_CHARS = 150;
 
@@ -120,6 +121,10 @@ async function handleNewProject(deps: PipelineDeps, req: PipelineRequest, ctx: U
 
   // Якорь создаётся позже — когда заполнены блоки 3 и 4 (см. nextStep → anchorBriefFromRecords).
 
+  // Стоп-фактор идеи виден уже по брифу: не собираем паспорт по теме, которую фонд не поддержит
+  const stopFactors = await screenStopFactors(deps, brief);
+  if (stopFactors.length > 0) return stopFactorBriefQuestion(deps, stopFactors);
+
   // ШАГ 4–5: извлечение и аудит
   await extractPassport(deps, projectId, req.program, req.text_input ?? '', sources);
   return nextStep(deps, ctx, projectId, req.program, skipSet(req));
@@ -141,12 +146,16 @@ async function handleExistingProject(deps: PipelineDeps, req: PipelineRequest, c
   const text = (req.text_input ?? '').trim();
   const newText = [text, ...added.map((s) => s.extracted_text ?? '')].filter(Boolean).join('\n\n');
 
-  // ШАГ 2 [AI Guard]: сверка нового ввода с якорем
-  if (newText && project.anchorReady) {
-    const isShortAnswer = text.length > 0 && text.length < SHORT_ANSWER_CHARS && !!req.previous_question;
-    const query = isShortAnswer ? `Вопрос по проекту: ${req.previous_question} Ответ: ${text}` : newText;
+  // ШАГ 2 [AI Guard]: сверка нового ввода с якорем.
+  // Ответ на точечный вопрос по блоку вне 3–4 с якорем не сравниваем (см. GUARDED_ANSWER_SECTIONS); новые файлы — всегда.
+  const answerOutsideAnchor = req.action === 'submit_answer' && !!target && !GUARDED_ANSWER_SECTIONS.has(target.section_id);
+  const filesText = added.map((s) => s.extracted_text ?? '').filter(Boolean).join('\n\n');
+  const guardText = answerOutsideAnchor ? filesText : newText;
+  if (guardText && project.anchorReady) {
+    const isShortAnswer = !answerOutsideAnchor && text.length > 0 && text.length < SHORT_ANSWER_CHARS && !!req.previous_question;
+    const query = isShortAnswer ? `Вопрос по проекту: ${req.previous_question} Ответ: ${text}` : guardText;
     const embedding = await llm.embed(query.slice(0, GUARD_QUERY_MAX_CHARS));
-    const guard = await store.guardCheck(projectId, embedding, newText.slice(0, 500), ctx.thresholds);
+    const guard = await store.guardCheck(projectId, embedding, guardText.slice(0, 500), ctx.thresholds);
     if (guard.action === 'blocked') {
       return {
         status: 'BLOCKED_PROJECT_SWAP',

@@ -6,7 +6,7 @@ import type { DependencyNode } from '@passport/passport-core';
 import { PipelineFailure } from '../errors';
 import type { UserContext } from '../db/store';
 import type { PipelineDeps } from './deps';
-import { GUARD_QUERY_MAX_CHARS } from './anchor';
+import { GUARD_QUERY_MAX_CHARS, GUARDED_ANSWER_SECTIONS } from './anchor';
 import { checkFieldValue } from './fieldValidation';
 import { invalidateDependents } from './invalidation';
 import { extractPassport } from './passport';
@@ -43,9 +43,9 @@ export async function handleSubmitForm(deps: PipelineDeps, req: PipelineRequest,
 
   // Пустое значение = «не менять» (поле не очищается).
   const projectId = ctx.project?.id ?? (await store.ensureProject(req.user_id));
-  const textValues = values.filter((v) => !CODE_FIELDS.has(v.field_key));
+  const textValues = values.filter((v) => !CODE_FIELDS.has(v.field_key) && GUARDED_ANSWER_SECTIONS.has(v.section_id));
 
-  // 2. Guard против чужих материалов — только когда якорь уже есть.
+  // 2. Guard против чужих материалов — только когда якорь уже есть и только по полям блоков 3–4 (из них строится якорь).
   if (ctx.project?.anchorReady && textValues.length > 0) {
     const joined = textValues.map((v) => v.value).join('\n\n');
     const embedding = await llm.embed(joined.slice(0, GUARD_QUERY_MAX_CHARS));
