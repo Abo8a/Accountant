@@ -9,6 +9,7 @@
     "start": "tsx src/main.ts",
     "start:support": "tsx src/support/main.ts",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "migrate": "tsx src/db/migrate-cli.ts",
     "verify:embedding": "tsx scripts/verify-embedding.ts",
     "seed:rag": "tsx scripts/seed-rag.ts",

@@ -16,7 +16,7 @@
     "verify:audit": "npm run verify:audit -w @passport/pipeline-api",
     "verify:consultant": "npm run verify:consultant -w @passport/pipeline-api",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "vitest run",
+    "test": "vitest run && npm test -w @passport/pipeline-api",
     "build": "npm run build -w @passport/frontend"
   },
   "devDependencies": {

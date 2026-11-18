@@ -47,7 +47,7 @@ jobs:
       - name: Tests
         env:
           EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
-        run: npx vitest run
+        run: npm test
 
   test-parser:
     name: Parser tests (Python)
