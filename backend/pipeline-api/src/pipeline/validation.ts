@@ -73,6 +73,8 @@ export const profileRequestSchema = z
         contacts: z.string().trim().max(500).optional(),
         education_status: z.enum(['student', 'postgraduate']).optional(),
         university: z.string().trim().max(300).optional(),
+        study_level: z.string().trim().max(50).optional(),
+        course: z.string().trim().max(10).optional(),
         region: z.string().trim().max(200).optional(),
       })
       .strict(),

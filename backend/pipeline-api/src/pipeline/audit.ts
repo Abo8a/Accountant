@@ -16,6 +16,10 @@ import type { DirectionCode } from '../rag/types';
 import type { PipelineDeps } from './deps';
 import type { BudgetRow, RecordRow } from '../db/store';
 import { createHash } from 'node:crypto';
+import { studentFacingRemark } from './remarks';
+import { FIELD_TITLES } from './exportLabels';
+
+const fieldTitles = (keys: readonly string[]) => keys.map((k) => `«${FIELD_TITLES[k] ?? k}»`).join(', ');
 
 const CODE_FIELDS = new Set(['4/direction', '4/tech_challenge']);
 const OPTIONAL_FIELDS = new Set(['4/tech_challenge']);
@@ -358,8 +362,8 @@ export async function auditPassport(deps: PipelineDeps, projectId: string, scope
         if (hasMismatch) failedFields.push('tech_challenge');
       }
 
-      let remark = kimiAudit?.remark ?? null;
-      let howToFix = kimiAudit?.how_to_fix ?? null;
+      let remark = studentFacingRemark(kimiAudit?.remark);
+      let howToFix = studentFacingRemark(kimiAudit?.how_to_fix);
 
       if (isFatal) {
         const fatal = fatalStopFactorsOut.find((f) => f.affected_sections.includes(s.id));
@@ -371,8 +375,8 @@ export async function auditPassport(deps: PipelineDeps, projectId: string, scope
         remark = `[Критерий: Научно-техническая обоснованность] Несоответствие направления и технологического вызова: ${mismatch}`;
         howToFix = 'Выберите технологический вызов, соответствующий тематическому направлению проекта (Блок 4).';
       } else if (emptyFields.length > 0 && !remark) {
-        remark = `В Блоке ${s.id} не заполнены обязательные поля: ${emptyFields.join(', ')}.`;
-        howToFix = `Заполните обязательные поля: ${emptyFields.join(', ')}.`;
+        remark = `В Блоке ${s.id} не заполнены обязательные поля: ${fieldTitles(emptyFields)}.`;
+        howToFix = `Заполните обязательные поля: ${fieldTitles(emptyFields)}.`;
       }
 
       finalBlockAudits.push({
@@ -400,6 +404,12 @@ export async function auditPassport(deps: PipelineDeps, projectId: string, scope
   // Блоки, ждущие правок студента: вердикт прошлого аудита без изменений
   for (const s of pendingSections) {
     const prev = scope?.previous.block_audits.find((b) => b.section_id === s.id);
+    // Одобренный блок, размороженный правкой связанного: замечаний нет, вердикт «одобрен» в силе до его ре-аудита
+    // (иначе он стал бы пробелом без замечания и студента спрашивали бы о нём по кругу).
+    if (prev?.status === 'approved') {
+      finalBlockAudits.push(prev);
+      continue;
+    }
     finalBlockAudits.push({
       section_id: s.id,
       status: 'needs_review',
@@ -470,10 +480,10 @@ export async function auditPassport(deps: PipelineDeps, projectId: string, scope
       budgetAuditOut = {
         status: 'needs_review',
         remark:
-          auditOutput.budget_audit?.remark ??
+          studentFacingRemark(auditOutput.budget_audit?.remark) ??
           (budgetViolations.length > 0 ? budgetViolations.join('; ') : 'Смета требует доработки.'),
         how_to_fix:
-          auditOutput.budget_audit?.how_to_fix ??
+          studentFacingRemark(auditOutput.budget_audit?.how_to_fix) ??
           'Скорректируйте статьи сметы в соответствии с правилами конкурса и ограничениями лимитов.',
         violations: budgetViolations,
       };

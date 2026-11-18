@@ -30,11 +30,23 @@ export interface DirectionChallengeProps {
   loadChallenges?: () => Promise<TechChallengeOption[]>;
   /** Ссылка «Не знаю, какое выбрать — помогите» под направлением (эталон Gaps.dc.html): открывает ИИ-Консультанта. */
   onHelp?: () => void;
+  /** Предложенное системой направление (выбрано заранее, студент может сменить). */
+  initialDirection?: string;
+  /** Предложенный вызов того же направления. */
+  initialChallenge?: string;
 }
 
-export function DirectionChallenge({ onSubmit, busy = false, loadChallenges = fetchChallenges, onHelp }: DirectionChallengeProps) {
-  const [direction, setDirection] = useState('');
-  const [challenge, setChallenge] = useState('');
+export function DirectionChallenge({
+  onSubmit,
+  busy = false,
+  loadChallenges = fetchChallenges,
+  onHelp,
+  initialDirection,
+  initialChallenge,
+}: DirectionChallengeProps) {
+  // Предложение системы выбрано заранее; студент подтверждает его или меняет (вызов можно снять: «Без вызова»).
+  const [direction, setDirection] = useState(initialDirection ?? '');
+  const [challenge, setChallenge] = useState(initialDirection ? (initialChallenge ?? '') : '');
   const [all, setAll] = useState<TechChallengeOption[]>([]);
   const [error, setError] = useState<string | null>(null);
 

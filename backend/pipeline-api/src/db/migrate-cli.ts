@@ -1,9 +1,10 @@
 // Запуск: SUPABASE_DB_URL=postgres://... DEV_SEED=1 npm run migrate -w @passport/pipeline-api
 // Если схема уже есть (таблица app_projects существует), миграции пропускаются:
 // повторный `docker compose up` не должен падать. Принудительно: FORCE_MIGRATE=1 (тогда упадёт на существующих объектах).
+// Исключение — добавочные миграции (номер от INCREMENTAL_FROM): они идемпотентны и применяются на каждой развёрнутой базе.
 import pg from 'pg';
 import { loadConfig, SUPABASE_DIR } from '../config';
-import { applyMigrations } from './migrate';
+import { applyIncrementalMigrations, applyMigrations } from './migrate';
 import { fromPgPool, type SqlClient } from './sql';
 
 const { Pool } = pg;
@@ -20,7 +21,8 @@ async function main() {
   try {
     const sql = fromPgPool(pool);
     if (process.env.FORCE_MIGRATE !== '1' && (await isSchemaPresent(sql))) {
-      console.log('Schema already present (app_projects exists): migrations skipped.');
+      const applied = await applyIncrementalMigrations(sql, SUPABASE_DIR);
+      console.log('Schema already present (app_projects exists): base migrations skipped, incremental applied:', applied);
       return;
     }
     const result = await applyMigrations(sql, SUPABASE_DIR, { devSeed: process.env.DEV_SEED === '1' });

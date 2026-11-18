@@ -5,7 +5,7 @@ import type { PipelineRequest } from '@passport/contracts';
 import { handlePipeline } from '../src/pipeline/handler';
 import { FakeLlm } from '../src/llm/fake';
 import { PASSPORT_SECTIONS } from '@passport/contracts';
-import { createTestDb, createUser, FakeParser, makeDeps, type TestDb } from './helpers';
+import { briefAndConfirm, createTestDb, createUser, FakeParser, makeDeps, type TestDb } from './helpers';
 
 const BRIEF =
   'Сервис помощи студентам с поиском попутчиков по маршруту и расписанию занятий. ' +
@@ -289,7 +289,7 @@ describe('пайплайн v1.0', () => {
     });
     const deps = makeDeps(db, llm);
     await seedBudget(deps, userId);
-    const res = await handlePipeline(deps, req(userId, { text_input: BRIEF }));
+    const res = await briefAndConfirm(deps, req(userId, { text_input: BRIEF }));
 
     expect(res.status).toBe('COMPLETED');
     if (res.status !== 'COMPLETED') return;
@@ -323,7 +323,7 @@ describe('пайплайн v1.0', () => {
     );
 
     await seedBudget(deps, userId);
-    const first = await handlePipeline(deps, req(userId, { text_input: BRIEF }));
+    const first = await briefAndConfirm(deps, req(userId, { text_input: BRIEF }));
     expect(first).toMatchObject({ status: 'STOP_NOV', target_field: { section_id: 6, field_key: 'analogues_comparison' } });
 
     const second = await handlePipeline(
@@ -347,7 +347,7 @@ describe('пайплайн v1.0', () => {
     const llm = new FakeLlm({ extract: fullExtraction });
     const deps = makeDeps(db, llm);
     await seedBudget(deps, userId);
-    const res = await handlePipeline(deps, req(userId, { text_input: BRIEF }));
+    const res = await briefAndConfirm(deps, req(userId, { text_input: BRIEF }));
     expect(res.status).toBe('COMPLETED');
     if (res.status === 'COMPLETED') {
       expect(res.checklist.join(' ')).toContain('недоступна на базовом тарифе');

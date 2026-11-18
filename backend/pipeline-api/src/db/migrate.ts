@@ -30,3 +30,17 @@ export async function applyMigrations(sql: SqlClient, supabaseDir: string, opts:
 
   return { migrations, seeds };
 }
+
+/** Номер первой добавочной миграции: с неё файлы идемпотентны (IF NOT EXISTS) и применяются и на уже развёрнутой базе. */
+export const INCREMENTAL_FROM = 11;
+
+/** Применяет добавочные миграции (номер >= INCREMENTAL_FROM) к базе, где основная схема уже создана. */
+export async function applyIncrementalMigrations(sql: SqlClient, supabaseDir: string): Promise<string[]> {
+  const files = readdirSync(join(supabaseDir, 'migrations'))
+    .filter((f) => f.endsWith('.sql') && Number.parseInt(f, 10) >= INCREMENTAL_FROM)
+    .sort();
+  for (const file of files) {
+    await sql.exec(readFileSync(join(supabaseDir, 'migrations', file), 'utf8'));
+  }
+  return files;
+}

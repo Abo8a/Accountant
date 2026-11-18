@@ -2,8 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BrandMark } from '../../shared/ui/Logo/Logo';
 import { env } from '../../shared/config/env';
-import { callPassportPipeline } from '../../shared/api/pipeline';
-import { saveFlow } from '../../shared/state/flow';
+import { loadFlow, saveFlow } from '../../shared/state/flow';
 import { OnboardingHeader } from './OnboardingHeader';
 import { ConsultantWidget } from '../consultant/ConsultantWidget';
 import './common.css';
@@ -41,14 +40,17 @@ const QUESTIONS = [
 
 export function Brief() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>('ask');
+  // Живой режим: разбор файлов к бэкенду пока не подключён (нет хранилища файлов), поэтому сразу анкета.
+  const [step, setStep] = useState<Step>(env.liveApi ? 'form' : 'ask');
+  const [draft] = useState<Record<string, string>>(() => (env.liveApi ? loadFlow().briefDraft ?? {} : {}));
+  const [refusal] = useState(() => (env.liveApi ? loadFlow().briefRefusal ?? null : null));
   const [plan, setPlan] = useState<Plan>('pro');
   const [files, setFiles] = useState<UploadedFile[]>(INITIAL_FILES);
 
   const free = plan === 'free';
   // На Базовом тарифе ветки «файлы» нет: показываем вопрос.
   const current: Step = free && step === 'files' ? 'ask' : step;
-  const canUpload = !free;
+  const canUpload = !free && !env.liveApi;
   const used = files.filter((f) => f.kind !== 'duplicate').length;
   const submitLabel = current === 'files' ? 'Собрать паспорт по файлам' : 'Собрать паспорт';
 
@@ -60,23 +62,16 @@ export function Brief() {
       navigate('/generating');
       return;
     }
-    // Живой режим: текст брифа уходит в пайплайн; ответ сохраняем для экрана пробелов.
-    const text = Array.from(event.currentTarget.querySelectorAll('textarea'))
+    // Живой режим: сборка идёт 1–3 минуты, поэтому бриф не ждёт ответа — его отправляет экран сборки с прогрессом.
+    // Ответы остаются в полях: если сборка вернёт студента на бриф (стоп-фактор), набирать их заново не придётся.
+    const areas = Array.from(event.currentTarget.querySelectorAll('textarea'));
+    const text = areas
       .map((t) => t.value.trim())
       .filter(Boolean)
       .join('\n\n');
     setBriefError(null);
-    try {
-      const res = await callPassportPipeline({ action: 'init_or_upload', text_input: text });
-      if (res.status === 'ERROR') {
-        setBriefError(res.message);
-        return;
-      }
-      saveFlow({ last: res });
-      navigate('/generating');
-    } catch {
-      setBriefError('Не удалось отправить бриф. Попробуйте ещё раз.');
-    }
+    saveFlow({ pendingBrief: text, briefRefusal: undefined, briefDraft: Object.fromEntries(areas.map((t) => [t.id, t.value])) });
+    navigate('/generating');
   };
 
   const removeFile = (id: string) => setFiles((list) => list.filter((f) => f.id !== id));
@@ -87,6 +82,7 @@ export function Brief() {
         current={2}
         profileLink="/onboarding"
         trailing={
+          env.liveApi ? undefined : (
           <div role="group" aria-label="Тариф для прототипа" className="brief-proto">
             <span className="brief-proto__label">Прототип:</span>
             <button type="button" aria-pressed={free} onClick={() => setPlan('free')} className="brief-proto__btn">
@@ -96,6 +92,7 @@ export function Brief() {
               Профи
             </button>
           </div>
+          )
         }
       />
 
@@ -191,6 +188,18 @@ export function Brief() {
                 </p>
               </div>
 
+              {refusal && refusal.length > 0 && (
+                <section role="alert" className="brief-refusal">
+                  <h2 className="brief-refusal__title">Фонд не поддержит проект в таком виде</h2>
+                  {refusal.map((f) => (
+                    <div key={f.reason} className="brief-refusal__item">
+                      <p className="brief-refusal__reason">{f.reason}</p>
+                      {f.how_to_fix && <p className="brief-refusal__fix">{f.how_to_fix}</p>}
+                    </div>
+                  ))}
+                </section>
+              )}
+
               <section className="brief-questions">
                 {QUESTIONS.map((item) => (
                   <div key={item.id} className="brief-question">
@@ -198,7 +207,7 @@ export function Brief() {
                       {item.n}. {item.q}
                       <span aria-hidden="true" className="ob-required"> *</span>
                     </label>
-                    <textarea id={item.id} className="ob-textarea brief-textarea" required aria-required="true" rows={3} />
+                    <textarea id={item.id} className="ob-textarea brief-textarea" required aria-required="true" rows={3} defaultValue={draft[item.id]} />
                     <details>
                       <summary className="brief-question__summary">Как обычно отвечают</summary>
                       <p className="brief-question__example">{item.ex}</p>
@@ -215,6 +224,7 @@ export function Brief() {
                     id="extra"
                     className="ob-textarea brief-textarea brief-textarea--extra"
                     rows={5}
+                    defaultValue={draft.extra}
                     placeholder="Например: в октябре договорились о пилоте с центром соцподдержки, письмо пока не подписано"
                   />
                 </div>
@@ -234,7 +244,12 @@ export function Brief() {
                   Назад
                 </Link>
               )}
-              {current !== 'ask' && (
+              {current !== 'ask' && env.liveApi && (
+                <Link to="/onboarding" className="brief-back">
+                  Назад
+                </Link>
+              )}
+              {current !== 'ask' && !env.liveApi && (
                 <button type="button" onClick={() => setStep('ask')} className="brief-back brief-back--button">
                   Назад
                 </button>

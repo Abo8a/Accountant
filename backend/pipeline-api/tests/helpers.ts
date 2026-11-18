@@ -10,6 +10,8 @@ import { FakeLlm } from '../src/llm/fake';
 import { DEFAULT_MANIFEST_PATH, SUPABASE_DIR } from '../src/config';
 import type { DocumentParser, ParsedDocument } from '../src/parser/client';
 import type { PipelineDeps } from '../src/pipeline/deps';
+import { handlePipeline } from '../src/pipeline/handler';
+import type { PipelineRequest, PipelineResponse } from '@passport/contracts';
 
 export interface TestDb {
   pg: PGlite;
@@ -74,4 +76,41 @@ export function makeDeps(db: TestDb, llm = new FakeLlm(), parser: DocumentParser
     kb: loadKbManifest(DEFAULT_MANIFEST_PATH),
     logger: { error: () => {}, warn: () => {}, info: () => {} },
   };
+}
+
+/**
+ * Бриф и подтверждение направления, как на экране «Направление проекта»: направление и вызов выбирает студент,
+ * предложение сборки он принимает как есть (или передаёт своё). Возвращает ответ после подтверждения.
+ */
+export async function briefAndConfirm(
+  deps: PipelineDeps,
+  request: PipelineRequest,
+  choice?: { direction: string; tech_challenge?: string | null },
+): Promise<PipelineResponse> {
+  const first = await handlePipeline(deps, request);
+  if (first.status !== 'NEED_USER_INPUT' || first.target_field?.field_key !== 'direction') return first;
+  return confirmDirection(deps, request, first, choice);
+}
+
+/** Отправляет выбор направления (и вызова) в ответ на вопрос о направлении. */
+export async function confirmDirection(
+  deps: PipelineDeps,
+  request: PipelineRequest,
+  question: PipelineResponse,
+  choice?: { direction: string; tech_challenge?: string | null },
+): Promise<PipelineResponse> {
+  const suggestion = question.status === 'NEED_USER_INPUT' ? question.suggestion : undefined;
+  const direction = choice?.direction ?? suggestion?.direction ?? 'Н1';
+  const challenge = choice ? choice.tech_challenge ?? null : suggestion?.tech_challenge ?? null;
+  return handlePipeline(deps, {
+    user_id: request.user_id,
+    program: request.program,
+    eligibility: request.eligibility,
+    skipped_fields: request.skipped_fields,
+    action: 'submit_form',
+    form: [
+      { section_id: 4, field_key: 'direction', value: direction },
+      ...(challenge ? [{ section_id: 4, field_key: 'tech_challenge', value: challenge }] : []),
+    ],
+  });
 }

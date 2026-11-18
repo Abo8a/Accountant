@@ -7,7 +7,7 @@ import { handlePipeline } from '../src/pipeline/handler';
 import { stripMetaStubs } from '../src/pipeline/passport';
 import { FakeLlm } from '../src/llm/fake';
 import { resolveLlmParams } from '../src/llm/openai';
-import { createTestDb, createUser, makeDeps, type TestDb } from './helpers';
+import { briefAndConfirm, createTestDb, createUser, makeDeps, type TestDb } from './helpers';
 
 let db: TestDb;
 
@@ -71,7 +71,7 @@ describe('сборка: служебные заглушки вместо све�
   it('поле, которое модель заполнила заглушкой, остаётся пробелом, и студента о нём спрашивают', async () => {
     const userId = await createUser(db.sql);
     const deps = makeDeps(db, new FakeLlm({ extract: fullExtraction({ '2/team_members': 'Сведения о составе команды не предоставлены.' }) }));
-    const res = await handlePipeline(deps, req(userId, { text_input: BRIEF }));
+    const res = await briefAndConfirm(deps, req(userId, { text_input: BRIEF }));
     expect(res).toMatchObject({ status: 'NEED_USER_INPUT', target_field: { section_id: 2, field_key: 'team_members' } });
     if (res.status !== 'NEED_USER_INPUT') return;
     expect(res.passport?.find((f) => f.section_id === 2 && f.field_key === 'team_members')?.value ?? null).toBeNull();
@@ -145,7 +145,7 @@ describe('точечный ре-аудит (6.1) вместо полного а�
     });
     const deps = makeDeps(db, llm);
 
-    const first = await handlePipeline(deps, req(userId, { text_input: BRIEF }));
+    const first = await briefAndConfirm(deps, req(userId, { text_input: BRIEF }));
     expect(auditInputs).toHaveLength(1);
     expect(first).toMatchObject({ status: 'NEED_USER_INPUT', target_field: { section_id: 3, field_key: 'problem_description' } });
 
@@ -197,7 +197,7 @@ describe('точечный ре-аудит (6.1) вместо полного а�
         budget_audit: { status: 'not_provided', remark: null, how_to_fix: null },
       }),
     });
-    const res = await handlePipeline(makeDeps(db, llm), req(userId, { text_input: BRIEF }));
+    const res = await briefAndConfirm(makeDeps(db, llm), req(userId, { text_input: BRIEF }));
     expect(res).toMatchObject({ status: 'NEED_USER_INPUT', target_field: { section_id: 3 } });
     if (res.status !== 'NEED_USER_INPUT') return;
     expect(res.fatal_stop_factors?.[0].code).toBe('NO_TECH_BASIS');

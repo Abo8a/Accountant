@@ -1,6 +1,11 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useCabinetShell } from '../../shared/layout/CabinetLayout';
+import { fetchMe } from '../../shared/api/auth';
+import { saveFounder } from '../../shared/api/profile';
+import { STUDY_CERTIFICATE_ACCEPT, uploadStudyCertificate } from '../../shared/api/cabinet';
+import { refreshCabinetState, useCabinetState } from '../../shared/state/cabinet';
+import { projectTitle, userBadge } from '../../shared/state/cabinetView';
 import './Profile.css';
 
 // Экран «Профиль» (F13). Эталон: design/project/Profile.dc.html, логика повторяет его renderVals().
@@ -46,6 +51,88 @@ interface FieldErrors {
 export interface ProfileProps {
   /** Сохранённые данные на момент открытия экрана. По умолчанию — демо из эталона. */
   initial?: ProfileData;
+  /** Основатель (живой режим — из профиля пользователя; по умолчанию — пример из макета). */
+  founder?: typeof FOUNDER;
+  projectName?: string;
+  /** Сохранение на бэкенде (живой режим). false — не сохранилось. */
+  onSave?: (data: ProfileData) => Promise<boolean>;
+  /** Дополнительный блок под данными (живой режим — справка об обучении). */
+  extra?: ReactNode;
+}
+
+/** Живой режим: данные основателя и справка об обучении из профиля пользователя. */
+export function LiveProfile() {
+  const state = useCabinetState();
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [certError, setCertError] = useState<string | null>(null);
+  useEffect(() => {
+    void fetchMe().then((me) => setEmail(me?.email ?? ''));
+  }, []);
+  if (!state) return null;
+  const f = state.founder as Record<string, string | undefined>;
+  const contacts = (f.contacts ?? '').split(',').map((c) => c.trim()).filter(Boolean);
+  const initial: ProfileData = {
+    phone: contacts.find((c) => !c.startsWith('@')) ?? '',
+    telegram: contacts.find((c) => c.startsWith('@')) ?? '',
+    studying: Boolean(f.education_status),
+    university: f.university ?? '',
+    level: f.study_level ?? (f.education_status === 'postgraduate' ? 'Аспирантура' : 'Бакалавриат'),
+    course: f.course ?? '1',
+    region: f.region ?? '',
+  };
+  const badge = userBadge(f.full_name);
+  const cert = state.study_certificate;
+
+  async function onCertificate(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setCertError(null);
+    setBusy(true);
+    const res = await uploadStudyCertificate(file);
+    setBusy(false);
+    if (res.ok) await refreshCabinetState();
+    else setCertError(res.message);
+  }
+
+  return (
+    <Profile
+      initial={initial}
+      founder={{ name: f.full_name ?? '', email, registered: '', initials: badge.initials }}
+      projectName={projectTitle(state.passport)}
+      onSave={async (d) => {
+        const ok = await saveFounder({
+          full_name: f.full_name ?? '',
+          contacts: [d.phone, d.telegram].filter(Boolean).join(', ') || undefined,
+          education_status: d.studying ? (d.level === 'Аспирантура' ? 'postgraduate' : 'student') : undefined,
+          university: d.studying ? d.university || undefined : undefined,
+          study_level: d.studying ? d.level : undefined,
+          course: d.studying ? d.course : undefined,
+          region: d.region || undefined,
+        });
+        if (ok) await refreshCabinetState();
+        return ok;
+      }}
+      extra={
+        <section className="profile__cert">
+          <span className="profile__info-caption">Справка об обучении</span>
+          <span className="profile__info-text">
+            {cert ? `Загружено: ${cert.file_name}` : 'Не загружена. Без справки из вуза фонд не примет заявку; паспорт можно готовить и без неё.'}
+          </span>
+          <label className="profile__cert-pick">
+            <input type="file" accept={STUDY_CERTIFICATE_ACCEPT} onChange={(e) => void onCertificate(e)} disabled={busy} className="profile__cert-input" />
+            {busy ? 'Загружаем…' : cert ? 'Заменить справку' : 'Загрузить справку (PDF, JPG, PNG до 8 МБ)'}
+          </label>
+          {certError && (
+            <span role="alert" className="profile__cert-error">
+              {certError}
+            </span>
+          )}
+        </section>
+      }
+    />
+  );
 }
 
 function formatStudying(data: ProfileData): string {
@@ -54,7 +141,7 @@ function formatStudying(data: ProfileData): string {
     : 'Сейчас не учусь — не подходит для программы';
 }
 
-export function Profile({ initial = PROFILE_DEMO }: ProfileProps = {}) {
+export function Profile({ initial = PROFILE_DEMO, founder = FOUNDER, projectName = 'Monetrix', onSave, extra }: ProfileProps = {}) {
   useCabinetShell({ mainPadding: 'var(--space-36) var(--space-48) var(--space-64)', mainGap: 'var(--space-28)' });
 
   const id = useId();
@@ -92,20 +179,29 @@ export function Profile({ initial = PROFILE_DEMO }: ProfileProps = {}) {
       setErrors(nextErrors);
       return;
     }
-    setSaved({
+    const next = {
       ...draft,
       phone: draft.phone.trim(),
       telegram: draft.telegram.trim(),
       university: draft.university.trim(),
-    });
+    };
+    setSaved(next);
     setDraft(null);
     setErrors({});
     setJustSaved(true);
+    if (onSave) {
+      void onSave(next).then((ok) => {
+        if (!ok) {
+          setJustSaved(false);
+          setSaved(saved);
+        }
+      });
+    }
   };
 
   const rows = [
     { label: 'Телефон', value: saved.phone || '—', color: 'var(--color-ink)' },
-    { label: 'Почта', value: FOUNDER.email, color: 'var(--color-ink)' },
+    { label: 'Почта', value: founder.email, color: 'var(--color-ink)' },
     { label: 'Telegram', value: saved.telegram || '—', color: 'var(--color-ink)' },
     {
       label: 'Обучение',
@@ -150,12 +246,12 @@ export function Profile({ initial = PROFILE_DEMO }: ProfileProps = {}) {
 
       <section className="profile__card">
         <div className="profile__founder">
-          <span className="profile__avatar" aria-hidden="true">{FOUNDER.initials}</span>
+          <span className="profile__avatar" aria-hidden="true">{founder.initials}</span>
           <div className="profile__founder-text">
             <span className="profile__name-row">
-              <span className="profile__name">{FOUNDER.name}</span>
+              <span className="profile__name">{founder.name}</span>
             </span>
-            <span className="profile__meta">{FOUNDER.registered}</span>
+            <span className="profile__meta">{founder.registered}</span>
           </div>
           <Link to="/support" className="profile__support">
             Ошибка в ФИО? Напишите в поддержку
@@ -340,6 +436,8 @@ export function Profile({ initial = PROFILE_DEMO }: ProfileProps = {}) {
         )}
       </section>
 
+      {extra}
+
       <section className="profile__info">
         <div className="profile__info-card profile__info-card--muted">
           <span className="profile__info-caption">Программа</span>
@@ -348,7 +446,7 @@ export function Profile({ initial = PROFILE_DEMO }: ProfileProps = {}) {
         </div>
         <div className="profile__info-card profile__info-card--peach">
           <span className="profile__info-caption profile__info-caption--terracotta">Проект</span>
-          <span className="profile__info-title">Monetrix</span>
+          <span className="profile__info-title">{projectName}</span>
           <span className="profile__info-text profile__info-text--strong">Один аккаунт — один проект. ФИО и проект закреплены друг за другом.</span>
         </div>
       </section>

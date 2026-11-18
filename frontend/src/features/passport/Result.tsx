@@ -4,6 +4,10 @@ import type { PipelineCompleted } from '@passport/contracts';
 import { BrandMark } from '../../shared/ui/Logo/Logo';
 import { env } from '../../shared/config/env';
 import { loadFlow } from '../../shared/state/flow';
+import { useCabinetState } from '../../shared/state/cabinet';
+import { openGapsCount } from '../../shared/state/cabinetView';
+import type { CabinetState } from '../../shared/api/cabinet';
+import type { FounderInput } from '../../shared/api/profile';
 import { downloadPassport } from '../../shared/api/exportSections';
 import './Result.css';
 
@@ -158,29 +162,59 @@ function confirmationFromCompleted(res: PipelineCompleted): Confirmation {
   return counts;
 }
 
+/** Итог последней проверки из состояния кабинета (живой режим, ответа COMPLETED нет в этой вкладке). */
+export function completedFromState(state: CabinetState): PipelineCompleted | undefined {
+  if (!state.result) return undefined;
+  const required = state.passport.filter((f) => !(f.section_id === 4 && f.field_key === 'tech_challenge'));
+  const ready = required.length > 0 && required.every((f) => f.review_status === 'approved') && state.budget_audit?.status === 'approved';
+  return {
+    status: 'COMPLETED',
+    export_ready: ready,
+    not_approved: [],
+    eligibility_status: state.result.eligibility_status,
+    summary: state.result.summary,
+    checklist: state.result.checklist,
+    warnings: state.result.warnings,
+    passport: state.passport,
+    block_audits: state.block_audits,
+    budget_audit: state.budget_audit ?? undefined,
+    fatal_stop_factors: [],
+  };
+}
+
 /** exportReady — все блоки и смета одобрены аудитом (демо-режим). В живом режиме берётся из COMPLETED.export_ready. */
 export function Result({ exportReady = false }: { exportReady?: boolean } = {}) {
   const last = env.liveApi ? loadFlow().last : undefined;
-  const completed = last?.status === 'COMPLETED' ? last : undefined;
+  const cabinet = useCabinetState();
+  const completed = last?.status === 'COMPLETED' ? last : cabinet ? completedFromState(cabinet) : undefined;
 
   const [demoVerdict, setDemoVerdict] = useState<Verdict>('warn');
   const [checks, setChecks] = useState<Record<string, boolean>>(env.liveApi ? {} : { study: true });
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const verdict = completed ? verdictFromCompleted(completed) : env.liveApi ? 'warn' : demoVerdict;
-  const items = completed ? todoFromCompleted(completed) : env.liveApi ? [] : SETS[demoVerdict].map((id) => POOL[id]).sort(byBlock);
-  const confirmation = completed ? confirmationFromCompleted(completed) : DEMO_CONFIRMATION;
+  const openGaps = cabinet ? openGapsCount(cabinet.passport) : 0;
+  const items = completed
+    ? todoFromCompleted(completed)
+    : env.liveApi
+      ? [{ id: 'gaps', n: 0, block: 'Паспорт', to: '/gaps', kind: 'audit' as const, text: `Ответить на вопросы в «Пробелах»${openGaps > 0 ? ` (осталось ${openGaps})` : ''} — после этого Буха проверит паспорт целиком` }]
+      : SETS[demoVerdict].map((id) => POOL[id]).sort(byBlock);
+  const confirmation = completed
+    ? confirmationFromCompleted(completed)
+    : env.liveApi
+      ? confirmationFromCompleted({ passport: cabinet?.passport ?? [] } as unknown as PipelineCompleted)
+      : DEMO_CONFIRMATION;
   const ready = completed ? completed.export_ready : env.liveApi ? false : demoVerdict === 'ok' || exportReady;
   const hero = HEROES[verdict];
   const doneCount = items.filter((t) => checks[t.id]).length;
 
   async function onDownloadDocx() {
-    const flow = loadFlow();
-    if (!flow.founder || flow.last?.status !== 'COMPLETED') {
+    const founder = (cabinet?.founder as FounderInput | undefined) ?? loadFlow().founder;
+    if (!founder?.full_name || !completed) {
       setDownloadError('Сначала заполните данные основателя и дождитесь готового паспорта.');
       return;
     }
-    setDownloadError(await downloadPassport(flow.founder, flow.last.passport));
+    setDownloadError(await downloadPassport(founder, completed.passport));
   }
 
   const heroIcon = verdict === 'bad' || verdict === 'fatal' ? 'bad' : verdict;

@@ -4,7 +4,18 @@ import { Logo } from '../ui/Logo/Logo';
 import { NavIcon } from '../ui/NavIcon/NavIcon';
 import type { SideNavItem } from '../ui/SideNav/SideNav';
 import '../ui/SideNav/SideNav.css';
+import { env } from '../config/env';
+import { useCabinetState } from '../state/cabinet';
+import { liveShell } from '../state/cabinetView';
 import './CabinetLayout.css';
+
+/** Пока состояние грузится, в живом режиме не показываем пример из макета (чужой проект, «Профессиональный»). */
+const LOADING_SHELL = {
+  project: { name: '', program: 'Студенческий стартап' },
+  plan: { name: '', validUntil: '', files: '', fillPercent: 0 },
+  user: { name: '', initials: '' },
+  gapsCount: null,
+};
 
 // Пункты кабинета из user-flows §1 и Passport.dc.html.
 export const CABINET_NAV: SideNavItem[] = [
@@ -115,11 +126,15 @@ export function CabinetLayout({
   const setShell = useCallback<ShellSetter>((patch) => setOverrides(patch), []);
   const contextValue = useMemo(() => setShell, [setShell]);
 
-  const p = { ...DEFAULT_PROJECT, ...project };
-  const pl = { ...DEFAULT_PLAN, ...plan };
-  const u = { ...DEFAULT_USER, ...user };
+  // Живой режим: проект, тариф, пользователь и счётчик пробелов — из состояния пользователя, а не пример из макета
+  const cabinet = useCabinetState();
+  const live = env.liveApi ? (cabinet ? liveShell(cabinet) : LOADING_SHELL) : null;
+  const p = { ...DEFAULT_PROJECT, ...live?.project, ...project };
+  const pl = { ...DEFAULT_PLAN, ...live?.plan, ...plan };
+  const u = { ...DEFAULT_USER, ...live?.user, ...user };
   const shell: CabinetShellSettings = {
     ...SHELL_DEFAULTS,
+    ...(live ? { gapsCount: live.gapsCount } : {}),
     ...(gapsCount !== undefined ? { gapsCount } : {}),
     ...ROUTE_SHELL[pathname],
     ...overrides,

@@ -5,17 +5,18 @@ import { env } from '../../shared/config/env';
 import { exportHintFromItems, exportReadyFromFlow, loadFlow, notApprovedFromFlow } from '../../shared/state/flow';
 import { downloadPassport } from '../../shared/api/exportSections';
 import { ConsultantWidget } from '../consultant/ConsultantWidget';
+import { LivePassport } from './LivePassport';
 import './Passport.css';
 
 // Экран «Паспорт проекта» по design/project/Passport.dc.html. Логика — порт скрипта эталона (renderVals):
 // блоки 1–10, подсветка утверждений по типу, панель утверждения, режим эксперта, правка поля, согласование.
 // Сохранение и пересчёт спанов — за бэкендом (user-flows F9 п.5); здесь состояние экрана, как в эталоне.
 
-type ClaimType = 'fact' | 'plan' | 'hyp' | 'client';
+export type ClaimType = 'fact' | 'plan' | 'hyp' | 'client';
 // Вид утверждения после проверки: «факт» различается по наличию документа.
-type VisKind = 'ok' | 'nodoc' | 'plan' | 'hyp' | 'client';
-type FieldStatus = 'ai' | 'needs' | 'reviewed' | 'approved';
-type SectionDot = 'lock' | 'needs' | 'approved' | 'ai';
+export type VisKind = 'ok' | 'nodoc' | 'plan' | 'hyp' | 'client';
+export type FieldStatus = 'ai' | 'needs' | 'reviewed' | 'approved';
+export type SectionDot = 'lock' | 'needs' | 'approved' | 'ai';
 type Seg = string | { c: string };
 
 interface ClaimDef {
@@ -99,7 +100,7 @@ const CLAIMS: Record<string, ClaimDef> = {
 
 const ref = (c: string): Seg => ({ c });
 
-const SECTIONS: SectionDef[] = [
+export const SECTIONS: SectionDef[] = [
   { id: 1, short: 'Основатель', name: 'Основатель, контакты, статус обучения', founder: true, fields: [] },
   {
     id: 2, short: 'Команда', name: 'Команда, роли, компетенции и опыт',
@@ -185,13 +186,13 @@ const FOUNDER_ROWS: [string, string][] = [
 ];
 
 // Три цвета утверждений: слова команды показываются как «Без документа», гипотезы — вместе с планами.
-const LEGEND: { kind: string; label: string }[] = [
+export const LEGEND: { kind: string; label: string }[] = [
   { kind: 'fact-doc', label: 'Подтверждено документом' },
   { kind: 'fact-nodoc', label: 'Без документа' },
   { kind: 'plan', label: 'План или гипотеза' },
 ];
 
-const KIND_LABEL: Record<VisKind, string> = {
+export const KIND_LABEL: Record<VisKind, string> = {
   ok: 'Подтверждено документом',
   nodoc: 'Без документа',
   plan: 'План или гипотеза',
@@ -199,7 +200,7 @@ const KIND_LABEL: Record<VisKind, string> = {
   client: 'Без документа',
 };
 
-const KIND_CLASS: Record<VisKind, string> = {
+export const KIND_CLASS: Record<VisKind, string> = {
   ok: 'passport-claim--fact-doc',
   nodoc: 'passport-claim--fact-nodoc',
   plan: 'passport-claim--plan',
@@ -208,12 +209,12 @@ const KIND_CLASS: Record<VisKind, string> = {
 };
 
 // Цвет плашки типа: слова команды — как «без документа», гипотеза — как план.
-const KIND_CHIP: Record<VisKind, VisKind> = { ok: 'ok', nodoc: 'nodoc', plan: 'plan', hyp: 'plan', client: 'nodoc' };
+export const KIND_CHIP: Record<VisKind, VisKind> = { ok: 'ok', nodoc: 'nodoc', plan: 'plan', hyp: 'plan', client: 'nodoc' };
 
 // Факты без документа и «со слов» — риски: в режиме эксперта остаются видимыми.
-const RISKY: Record<VisKind, boolean> = { ok: false, nodoc: true, plan: false, hyp: false, client: true };
+export const RISKY: Record<VisKind, boolean> = { ok: false, nodoc: true, plan: false, hyp: false, client: true };
 
-const ADVICE: Record<VisKind, string> = {
+export const ADVICE: Record<VisKind, string> = {
   nodoc: 'Эксперт фонда попросит подтверждение: протокол, акт, выписку или материалы исследования.',
   client: 'Сохранено как слова команды. Если есть документ — привяжите его.',
   plan: 'План не считается достижением.',
@@ -229,7 +230,7 @@ const TYPE_OPTIONS: [ClaimType, string][] = [
 
 const TYPE_GROUP: Record<ClaimType, ClaimType> = { fact: 'fact', client: 'fact', plan: 'plan', hyp: 'plan' };
 
-const FIELD_CHIP: Partial<Record<FieldStatus, { label: string; tone: PillTone }>> = {
+export const FIELD_CHIP: Partial<Record<FieldStatus, { label: string; tone: PillTone }>> = {
   needs: { label: 'Нужна проверка', tone: 'warning' },
   reviewed: { label: 'Подтверждено', tone: 'info' },
   approved: { label: 'Согласовано', tone: 'success' },
@@ -276,7 +277,12 @@ function segText(seg: Seg): string {
 const exportHint = 'Скачать можно, когда все 10 блоков одобрены';
 
 /** exportReady — все блоки и смета одобрены аудитом (ответ COMPLETED.export_ready). По умолчанию — нет. */
+/** В живом режиме — паспорт пользователя (LivePassport), в демо — пример из макета. */
 export function Passport({ exportReady = false }: { exportReady?: boolean } = {}) {
+  return env.liveApi ? <LivePassport /> : <DemoPassport exportReady={exportReady} />;
+}
+
+function DemoPassport({ exportReady = false }: { exportReady?: boolean }) {
   // В живом режиме готовность берём из ответа пайплайна (export_ready), в демо — из пропса.
   const ready = env.liveApi ? exportReadyFromFlow() : exportReady;
   // В живом режиме подсказка называет блоки, которые мешают скачать; в демо — общая фраза.
@@ -515,7 +521,7 @@ export function Passport({ exportReady = false }: { exportReady?: boolean } = {}
   );
 }
 
-interface ClaimPanelProps {
+export interface ClaimPanelProps {
   text: string;
   kind: VisKind;
   type: ClaimType;
@@ -525,9 +531,11 @@ interface ClaimPanelProps {
   origin: string;
   conf: number;
   onPickType: (type: ClaimType) => void;
+  /** Живой режим: тип и привязку документа пока меняет только пайплайн — панель показывает сведения без действий. */
+  readOnly?: boolean;
 }
 
-function ClaimPanel({ text, kind, type, source, page, quote, origin, conf, onPickType }: ClaimPanelProps) {
+export function ClaimPanel({ text, kind, type, source, page, quote, origin, conf, onPickType, readOnly = false }: ClaimPanelProps) {
   return (
     <div className="passport__claim">
       <span className={`passport__kind passport__kind--${KIND_CHIP[kind]}`}>{KIND_LABEL[kind]}</span>
@@ -544,6 +552,7 @@ function ClaimPanel({ text, kind, type, source, page, quote, origin, conf, onPic
                 key={id}
                 type="button"
                 aria-pressed={pressed}
+                disabled={readOnly}
                 onClick={() => onPickType(id)}
                 className={`passport__type ${pressed ? 'passport__type--on' : 'passport__type--off'}`}
               >
@@ -577,12 +586,14 @@ function ClaimPanel({ text, kind, type, source, page, quote, origin, conf, onPic
         )}
       </div>
 
-      <span className="passport__conf">{`Уверенность ИИ в типе: ${Math.round(conf * 100)}%`}</span>
+      {!readOnly && <span className="passport__conf">{`Уверенность ИИ в типе: ${Math.round(conf * 100)}%`}</span>}
 
-      <div className="passport__claim-actions">
-        <button type="button" className="passport__btn-main">Привязать документ</button>
-        <button type="button" className="passport__btn-second">Убрать из паспорта</button>
-      </div>
+      {!readOnly && (
+        <div className="passport__claim-actions">
+          <button type="button" className="passport__btn-main">Привязать документ</button>
+          <button type="button" className="passport__btn-second">Убрать из паспорта</button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { BudgetItemInput, PipelineQuestion, PipelineResponse, TargetField } from '@passport/contracts';
 import { callPassportPipeline } from '../../shared/api/pipeline';
 import { saveFlow } from '../../shared/state/flow';
+import { refreshCabinetState } from '../../shared/state/cabinet';
 import { Button } from '../../shared/ui';
 import { BudgetTable } from '../budget/BudgetTable';
 import { AuditRemark } from './AuditRemark';
@@ -50,12 +51,14 @@ function LiveGapsScreen({ initial, onDone, onHelp }: LiveGapsProps & { onHelp: (
         return;
       }
       saveFlow({ last: next });
+      void refreshCabinetState();
       if (next.status === 'COMPLETED') {
         onDone();
         return;
       }
       setRes(next);
-      setAnswer('');
+      // Отклонённый ответ остаётся в поле: студент дописывает его по замечанию, а не набирает заново
+      if (next.status !== 'ANSWER_REJECTED') setAnswer('');
     } catch {
       setError('Не удалось отправить ответ. Попробуйте ещё раз.');
     } finally {
@@ -63,10 +66,25 @@ function LiveGapsScreen({ initial, onDone, onHelp }: LiveGapsProps & { onHelp: (
     }
   }
 
+  // Открыли «Пробелы» в новой вкладке или после входа: ответа в этой вкладке нет — спрашиваем текущий шаг у пайплайна
+  // (без нового текста модели не вызываются, если паспорт не менялся).
+  useEffect(() => {
+    if (!initial) void send({ action: 'init_or_upload' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function skipGap(tf: TargetField) {
     const next = [...skipped, tf];
     setSkipped(next);
     void send({ action: 'skip_gap', target_field: tf, skipped_fields: next });
+  }
+
+  if (!res && busy) {
+    return (
+      <main className="ob-page lg">
+        <p className="ob-lead">Паспорт обрабатывается. Обновите страницу через минуту.</p>
+      </main>
+    );
   }
 
   if (!res || res.status === 'WAITING_FOR_INITIAL_BRIEF') {
@@ -119,8 +137,13 @@ function LiveGapsScreen({ initial, onDone, onHelp }: LiveGapsProps & { onHelp: (
       return (
         <main className="ob-page lg">
           <h1 className="ob-title">Направление проекта</h1>
+          {/* Предложение системы по описанию проекта: направление и вызов выбирает студент */}
+          {res.suggestion && res.question && <p className="ob-lead lg__question">{res.question}</p>}
           {res.rejection_reason && <AuditRemark remark={res.rejection_reason} />}
           <DirectionChallenge
+            key={`${res.suggestion?.direction ?? ''}/${res.suggestion?.tech_challenge ?? ''}`}
+            initialDirection={res.suggestion?.direction}
+            initialChallenge={res.suggestion?.tech_challenge ?? undefined}
             busy={busy}
             onHelp={askHelp}
             onSubmit={(v: DirectionChallengeValue) =>

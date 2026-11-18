@@ -4,7 +4,7 @@ import type { PipelineRequest } from '@passport/contracts';
 import { handlePipeline } from '../src/pipeline/handler';
 import { FakeLlm } from '../src/llm/fake';
 import { PASSPORT_SECTIONS } from '@passport/contracts';
-import { createTestDb, createUser, makeDeps, type TestDb } from './helpers';
+import { briefAndConfirm, createTestDb, createUser, makeDeps, type TestDb } from './helpers';
 
 const BRIEF =
   'Сервис помощи студентам с поиском попутчиков по маршруту и расписанию занятий. ' +
@@ -71,7 +71,7 @@ async function completeProject(userId: string) {
   const deps = makeDeps(db, llm);
   const seeded = await handlePipeline(deps, req(userId, { action: 'submit_form', budget_items: VALID_BUDGET }));
   expect(seeded).toMatchObject({ status: 'WAITING_FOR_INITIAL_BRIEF' });
-  const res = await handlePipeline(deps, req(userId, { text_input: BRIEF }));
+  const res = await briefAndConfirm(deps, req(userId, { text_input: BRIEF }));
   expect(res.status).toBe('COMPLETED');
   return deps;
 }
@@ -219,7 +219,7 @@ describe('технологический вызов необязателен (р
     });
     const deps = makeDeps(db, llm);
     await handlePipeline(deps, req(userId, { action: 'submit_form', budget_items: VALID_BUDGET })); // смета нужна для COMPLETED
-    const res = await handlePipeline(deps, req(userId, { text_input: BRIEF }));
+    const res = await briefAndConfirm(deps, req(userId, { text_input: BRIEF }));
     expect(res.status).toBe('COMPLETED');
     if (res.status === 'COMPLETED') {
       expect(res.checklist.join(' ')).not.toContain('технологического вызова');
@@ -296,19 +296,18 @@ describe('1.3 смета в финализации', () => {
     expect(res.eligibility_status).not.toBe('NOT_ELIGIBLE');
   });
 
-  it('направление не совпадает с направлением вызова — блок 4 не согласован с причиной', async () => {
+  it('вызов чужого направления не принимается, а смена направления без вызова снимает прежний вызов', async () => {
     const userId = await createUser(db.sql);
     const deps = await completeProject(userId);
-    // вызов № 1 относится к Н1; меняем направление на Н2 вручную
+    expect((await recordOf(userId, 4, 'tech_challenge'))?.value).toBe('1'); // студент принял предложенный вызов № 1 (Н1)
+    // вызов № 1 относится к Н1: с направлением Н2 его выбрать нельзя
+    const wrong = await handlePipeline(deps, req(userId, { action: 'submit_form', form: [{ section_id: 4, field_key: 'direction', value: 'Н2' }, { section_id: 4, field_key: 'tech_challenge', value: '1' }] }));
+    expect(wrong).toMatchObject({ status: 'ERROR', code: 'INVALID_FIELD_VALUE' });
+    if (wrong.status === 'ERROR') expect(wrong.message).toContain('относится к направлению Н1');
+    // Направление Н2 без вызова: прежний вызов чужого направления снимается, расхождения нет
     await handlePipeline(deps, req(userId, { action: 'submit_form', form: [{ section_id: 4, field_key: 'direction', value: 'Н2' }] }));
-    const res = await handlePipeline(deps, req(userId, { action: 'submit_form', budget_items: VALID_BUDGET }));
-    if (res.status !== 'COMPLETED') throw new Error('expected COMPLETED');
-    // Аудит коллеги: расхождение направления и вызова не даёт согласовать блок 4, причина — в отчёте аудита.
-    const block4 = res.block_audits?.find((b) => b.section_id === 4);
-    expect(block4?.status).toBe('needs_review');
-    expect(block4?.remark ?? '').toContain('Несоответствие направления и технологического вызова');
-    expect(block4?.remark ?? '').toContain('относится к направлению Н1');
-    // Аудит ходит в базу знаний (RAG) по сети: без ключей эмбеддингов это занимает до ~30 секунд.
+    expect((await recordOf(userId, 4, 'direction'))?.value).toBe('Н2');
+    expect((await recordOf(userId, 4, 'tech_challenge'))?.value ?? '').toBe('');
   }, 120_000);
 });
 
@@ -323,11 +322,12 @@ describe('1.5 связанные блоки: «разморозка»', () => {
       [userId],
     );
 
+    const auditCalls = () => (deps.llm as unknown as { calls: { task: string }[] }).calls.filter((c) => c.task === 'audit').length;
+    const before = auditCalls();
     const res = await handlePipeline(deps, req(userId, { action: 'submit_form', form: [{ section_id: 2, field_key: 'team_members', value: 'Иван, Мария и новый разработчик Олег: backend, продукт и дизайн сервиса помощи студентам с поиском попутчиков.' }] }));
-    expect(res).toMatchObject({ status: 'NEED_USER_INPUT', target_field: { section_id: 5 } });
-
-    expect((await recordOf(userId, 5, 'current_stage'))?.review_status).toBe('needs_review');
-    expect((await recordOf(userId, 9, 'rid_certificates'))?.review_status).toBe('needs_review');
+    // Размороженные блоки 5 и 9 не спрашиваются как пробелы без замечаний: их сразу перепроверяет точечный ре-аудит
+    expect(res.status === 'NEED_USER_INPUT' && res.target_field?.section_id === 5 && !res.rejection_reason).toBe(false);
+    expect(auditCalls()).toBe(before + 1);
     expect((await recordOf(userId, 3, 'problem_description'))?.review_status).toBe('approved');
   });
 

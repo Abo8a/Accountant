@@ -426,6 +426,8 @@ describe('Этап 4: Комплексный аудит на Kimi, дельта-
 
     await db.store.replaceBudgetItems(projectId, VALID_BUDGET);
     await db.store.approveBudgetItems(projectId);
+    // Статус обучающегося подтверждён справкой из вуза (загружена при регистрации)
+    await db.store.saveStudyCertificate(userId, { file_name: 'spravka.pdf', mime_type: 'application/pdf', sha256_hash: 'x', content: Buffer.from('%PDF-1.4 test') });
 
     const llm = new FakeLlm({
       novelty: () => ({

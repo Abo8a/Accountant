@@ -140,6 +140,9 @@ const fullExtraction = () => ({
 });
 
 const OFF_TOPIC = 'Кулинарный рецепт пирога с яблоками и корицей';
+const OFF_TOPIC_LONG =
+  'Кулинарный рецепт пирога с яблоками и корицей: замесить песочное тесто на сливочном масле, выложить в форму, ' +
+  'добавить нарезанные яблоки с сахаром и корицей, выпекать сорок минут при температуре сто восемьдесят градусов.';
 
 // Сквозные сценарии: RAG-поиск внутри пайплайна идёт в локальную базу знаний и API эмбеддингов (20–30 с на сценарий).
 describe('анти-фрод на точечных ответах', { timeout: 120000 }, () => {
@@ -155,15 +158,29 @@ describe('анти-фрод на точечных ответах', { timeout: 12
     expect(res.status).not.toBe('BLOCKED_PROJECT_SWAP');
   });
 
-  it('ответ по блоку якоря (3) по-прежнему сверяется и блокируется при подмене', async () => {
+  it('развёрнутый ответ по блоку якоря (3) по-прежнему сверяется и блокируется при подмене', async () => {
     const userId = await createUser(db.sql);
     const deps = makeDeps(db, new FakeLlm({ extract: fullExtraction }));
     await handlePipeline(deps, req(userId, { text_input: BRIEF }));
     const res = await handlePipeline(
       deps,
-      req(userId, { action: 'submit_answer', target_field: { section_id: 3, field_key: 'problem_description' }, text_input: OFF_TOPIC }),
+      req(userId, { action: 'submit_answer', target_field: { section_id: 3, field_key: 'problem_description' }, text_input: OFF_TOPIC_LONG }),
     );
     expect(res).toMatchObject({ status: 'BLOCKED_PROJECT_SWAP' });
+  });
+
+  it('короткий ответ по блоку якоря не сверяется с якорем (мало текста — ложные блокировки), его проверяет валидатор', async () => {
+    const userId = await createUser(db.sql);
+    const llm = new FakeLlm({ extract: fullExtraction });
+    const deps = makeDeps(db, llm);
+    await handlePipeline(deps, req(userId, { text_input: BRIEF }));
+    const res = await handlePipeline(
+      deps,
+      req(userId, { action: 'submit_answer', target_field: { section_id: 3, field_key: 'problem_description' }, text_input: OFF_TOPIC }),
+    );
+    expect(res.status).not.toBe('BLOCKED_PROJECT_SWAP');
+    const validation = llm.calls.filter((c) => c.task === 'validate_answer').at(-1);
+    expect(validation?.input).toMatchObject({ project_summary: expect.any(String) });
   });
 
   it('форма с полями вне блоков 3–4 не блокируется', async () => {

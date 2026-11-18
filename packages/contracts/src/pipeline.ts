@@ -108,10 +108,18 @@ export interface PipelineQuestion {
   /** Что проверяет фонд в этом поле (критерий из базы знаний). Только для GAP_FILLING. */
   criteria?: string;
   rejection_reason?: string | null;
+  /** Для вопроса о направлении (4/direction): что предлагает система по описанию проекта. Студент подтверждает или меняет. */
+  suggestion?: DirectionSuggestionOut;
   block_audits?: BlockAuditOut[];
   budget_audit?: BudgetAuditOut;
   fatal_stop_factors?: FatalStopFactorOut[];
   passport?: PipelinePassportField[];
+}
+
+export interface DirectionSuggestionOut {
+  direction: string;
+  /** Номер технологического вызова того же направления или null (вызов не подобран). */
+  tech_challenge: string | null;
 }
 
 export interface PipelineSwapBlocked {

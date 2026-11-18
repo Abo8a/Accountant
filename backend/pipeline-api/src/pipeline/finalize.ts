@@ -32,6 +32,8 @@ export interface DeterministicNavigatorOpts {
   };
   budgetItems: BudgetRow[];
   extraChecklist: string[];
+  /** Справка об обучении уже загружена в профиль. */
+  studyCertificateUploaded?: boolean;
 }
 
 /** Детерминированный генератор финального резюме и чек-листа (ШАГ 8 без LLM). */
@@ -89,7 +91,9 @@ export function buildDeterministicNavigator(opts: DeterministicNavigatorOpts): {
 
   // Пошаговый чек-лист подачи в АС «Фонд-М» по правилам 8-й очереди
   const checklist: string[] = [
-    'Подготовить справку об обучении из вуза на официальном бланке (выдана не ранее даты объявления конкурса — 29.10.2026).',
+    opts.studyCertificateUploaded
+      ? 'Проверить загруженную справку об обучении: официальный бланк вуза, выдана не ранее даты объявления конкурса — 29.10.2026.'
+      : 'Загрузить в профиль справку об обучении из вуза на официальном бланке (выдана не ранее даты объявления конкурса — 29.10.2026): без неё заявку не примут.',
     'Подготовить справку от вуза о согласии на участие и об использовании РИД на бланке организации (не ранее 29.10.2026).',
     'Подготовить скан паспорта РФ (разворот с фото + страница с действующей регистрацией) единым PDF-файлом.',
     'Подготовить презентацию стартап-проекта (PDF или PPTX) и согласие на обработку персональных данных.',
@@ -222,7 +226,7 @@ async function finalize(
   if (mismatch) budgetStopFactors.push(`Направление и вызов: ${mismatch}`);
 
   const rules = evaluatePassportRules(
-    ctx.founderData,
+    { ...ctx.founderData, study_certificate_uploaded: ctx.studyCertificate !== null },
     passportRecords.map((r) => ({ section_id: r.section_id, value: r.value })),
     allClaims,
     program,
@@ -244,6 +248,7 @@ async function finalize(
     claims_stats: stats,
     budgetItems,
     extraChecklist,
+    studyCertificateUploaded: ctx.studyCertificate !== null,
   });
 
   const warnings = [...rules.warnings, ...extraWarnings];

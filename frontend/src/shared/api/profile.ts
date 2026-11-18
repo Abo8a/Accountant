@@ -6,6 +6,9 @@ export interface FounderInput {
   contacts?: string;
   education_status?: 'student' | 'postgraduate';
   university?: string;
+  /** Уровень обучения и курс (как в анкете регистрации). */
+  study_level?: string;
+  course?: string;
   region?: string;
 }
 

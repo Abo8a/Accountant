@@ -8,6 +8,12 @@ import type { FounderInput } from '../api/profile';
 export interface FlowState {
   founder?: FounderInput;
   last?: PipelineResponse;
+  /** Текст брифа, который экран сборки должен отправить (бриф не ждёт ответа: сборка идёт 1–3 минуты). */
+  pendingBrief?: string;
+  /** Ответы на вопросы брифа: остаются в полях, если сборка вернула студента на бриф. */
+  briefDraft?: Record<string, string>;
+  /** Отказ по стоп-фактору на брифе: причина и что изменить. */
+  briefRefusal?: { reason: string; how_to_fix: string }[];
 }
 
 const KEY = 'buha.flow';

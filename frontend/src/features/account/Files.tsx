@@ -20,6 +20,7 @@ import {
   type ProjectFile,
   type UploadStatus,
 } from './Files.model';
+import { useCabinetState } from '../../shared/state/cabinet';
 import './Files.css';
 
 // Экран «Материалы проекта». Эталон: design/project/Files.dc.html.
@@ -34,6 +35,27 @@ export interface FilesProps {
    * Передаётся явно, чтобы проверить состояние 402 при выключенной функции.
    */
   aiParsingEnabled?: boolean;
+  /** Начальный список файлов (живой режим — файлы пользователя; по умолчанию — пример из макета). */
+  initialFiles?: ProjectFile[];
+  /** Живой режим: загрузка материалов проекта к бэкенду ещё не подключена — вместо зоны загрузки показывается эта пояснение. */
+  uploadUnavailable?: string;
+}
+
+/** Живой режим: тариф и файлы пользователя (справка об обучении) вместо примера из макета. */
+export function LiveFiles() {
+  const state = useCabinetState();
+  if (!state) return null;
+  // Справка об обучении — документ профиля, а не материал проекта: в лимит файлов тарифа не входит.
+  const certNote = state.study_certificate
+    ? `Справка об обучении («${state.study_certificate.file_name}») загружена в профиль.`
+    : 'Справку об обучении загрузите в профиле или в блоке 1 паспорта.';
+  return (
+    <Files
+      plan={state.plan_id}
+      initialFiles={[]}
+      uploadUnavailable={`Разбор материалов проекта (презентации, документы) скоро появится. ${certNote}`}
+    />
+  );
 }
 
 type ToastTone = 'success' | 'neutral' | 'warning' | 'danger';
@@ -96,7 +118,7 @@ const EXT_CLASS: Record<ProjectFile['kind'], string> = {
   other: 'files__ext--other',
 };
 
-export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEnabled }: FilesProps = {}) {
+export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEnabled, initialFiles, uploadUnavailable }: FilesProps = {}) {
   // Отступы и зазор области из Files.dc.html (main: 36px 48px 64px, gap 28px). Маршрут /files не в ROUTE_SHELL.
   useCabinetShell({ mainPadding: '36px 48px 64px', mainGap: '28px' });
 
@@ -104,7 +126,7 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
   const fileLimit = planData.file_uploads_limit;
   const canUpload = aiParsingEnabled ?? planFeatures(planData.features).ai_parsing;
 
-  const [files, setFiles] = useState<ProjectFile[]>(SEED_FILES);
+  const [files, setFiles] = useState<ProjectFile[]>(initialFiles ?? SEED_FILES);
   const [toast, setToast] = useState<Toast | null>(null);
   const [blockedNotice, setBlockedNotice] = useState(false);
   const [previewId, setPreviewId] = useState<number | null>(null);
@@ -112,7 +134,7 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
   const inputRef = useRef<HTMLInputElement>(null);
   // Актуальный список для проверок внутри цикла загрузки (состояние React в замыкании устаревает).
   const filesRef = useRef<ProjectFile[]>(files);
-  const nextIdRef = useRef(SEED_FILES.length + 1);
+  const nextIdRef = useRef((initialFiles ?? SEED_FILES).length + 1);
 
   const commit = (next: ProjectFile[]) => {
     filesRef.current = next;
@@ -175,7 +197,7 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
   const total = files.reduce((sum, f) => sum + f.mb, 0);
   const countPct = fileLimit > 0 ? `${Math.min(100, Math.round((files.length / fileLimit) * 100))}%` : '0%';
   const sizePct = `${Math.max(1, Math.round(total / 2))}%`;
-  const atLimit = canUpload && files.length >= fileLimit;
+  const atLimit = canUpload && !uploadUnavailable && files.length >= fileLimit;
 
   const preview = files.find((f) => f.id === previewId) ?? null;
   const confirmFile = files.find((f) => f.id === confirmId) ?? null;
@@ -206,12 +228,14 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
           <h1 className="files__title">Материалы проекта</h1>
           <p className="files__lead">Всё, из чего Буха собирает паспорт. Каждый факт в паспорте ссылается на файл и страницу отсюда.</p>
         </div>
-        <button type="button" className="files__add" onClick={openPicker}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          Добавить файлы
-        </button>
+        {!uploadUnavailable && (
+          <button type="button" className="files__add" onClick={openPicker}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            Добавить файлы
+          </button>
+        )}
       </div>
 
       {toast && (
@@ -324,7 +348,11 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
           aria-label="Файлы для загрузки"
           onChange={onPick}
         />
-        {canUpload ? (
+        {uploadUnavailable ? (
+          <Notice tone="info" title="Материалы проекта">
+            {uploadUnavailable}
+          </Notice>
+        ) : canUpload ? (
           <>
             <button type="button" className="files__drop" onClick={openPicker} onDragOver={onDragOver} onDrop={onDrop}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

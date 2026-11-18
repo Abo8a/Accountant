@@ -11,9 +11,9 @@ import { Generating } from '../features/onboarding/Generating';
 import { Gaps } from '../features/passport/Gaps';
 import { Result } from '../features/passport/Result';
 import { Passport } from '../features/passport/Passport';
-import { Files } from '../features/account/Files';
-import { Billing } from '../features/account/Billing';
-import { Profile } from '../features/account/Profile';
+import { Files, LiveFiles } from '../features/account/Files';
+import { Billing, LiveBilling } from '../features/account/Billing';
+import { LiveProfile, Profile } from '../features/account/Profile';
 import { States } from '../features/account/States';
 import { AdminUsers } from '../features/admin/AdminUsers';
 import { AdminBilling } from '../features/admin/AdminBilling';
@@ -50,9 +50,9 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/gaps', shell: 'cabinet', element: <Gaps />, title: 'Буха — пробелы и новизна' },
   { path: '/result', shell: 'cabinet', element: <Result />, title: 'Буха — итог' },
   { path: '/passport', shell: 'cabinet', element: <Passport />, title: 'Буха — паспорт проекта' },
-  { path: '/files', shell: 'cabinet', element: <Files />, title: 'Буха — материалы проекта' },
-  { path: '/billing', shell: 'cabinet', element: <Billing />, title: 'Буха — тариф и оплата' },
-  { path: '/profile', shell: 'cabinet', element: <Profile />, title: 'Буха — профиль' },
+  { path: '/files', shell: 'cabinet', element: env.liveApi ? <LiveFiles /> : <Files />, title: 'Буха — материалы проекта' },
+  { path: '/billing', shell: 'cabinet', element: env.liveApi ? <LiveBilling /> : <Billing />, title: 'Буха — тариф и оплата' },
+  { path: '/profile', shell: 'cabinet', element: env.liveApi ? <LiveProfile /> : <Profile />, title: 'Буха — профиль' },
   { path: '/states', shell: 'none', element: <States />, title: 'Буха — блокировки и лимиты' },
   { path: '/support', shell: 'none', element: <Support />, title: 'Буха — поддержка' },
   { path: '/admin-panel/users', shell: 'admin', element: <AdminUsers />, title: 'Буха — админка, пользователи' },

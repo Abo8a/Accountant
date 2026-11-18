@@ -10,15 +10,29 @@ import { handleExport, type ExportReady, type ExportRequestBody } from './pipeli
 import { PipelineFailure } from './errors';
 import { handleAuthRequest, sessionUserFor, type AuthHttpOptions } from './auth/http';
 import type { PipelineError } from '@passport/contracts';
+import { loadCabinetState, saveStudyCertificate, STUDY_CERTIFICATE_MAX_BYTES } from './pipeline/state';
 
 const MAX_BODY_BYTES = 1_000_000;
 const EXPORT_PATH = '/export';
 const EXPORT_PREFIX = '/export/';
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const STATE_PATH = '/pipeline/state';
+const CERTIFICATE_PATH = '/pipeline/study-certificate';
+const UUID_RE =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function send(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(body));
+}
+
+async function readRaw(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
+  let size = 0;
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > maxBytes) throw new Error('payload too large');
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
 }
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
@@ -175,6 +189,42 @@ export function createPipelineServer(deps: PipelineDeps, opts: PipelineServerOpt
           'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.file_name)}`,
         });
         return res.end(file.content);
+      }
+
+      // Состояние кабинета (GET /pipeline/state) и справка об обучении (POST /pipeline/study-certificate, тело — сам файл).
+      if ((req.method === 'GET' && pathname === STATE_PATH) || (req.method === 'POST' && pathname === CERTIFICATE_PATH)) {
+        if (opts.sharedSecret && req.headers['x-pipeline-secret'] !== opts.sharedSecret) {
+          return send(res, 401, { error: 'unauthorized' });
+        }
+        let userId: unknown = req.headers['x-user-id'];
+        if (opts.auth) {
+          const user = await sessionUserFor(req, opts.auth);
+          if (!user) return send(res, 401, { status: 'UNAUTHORIZED' });
+          userId = user.userId;
+        }
+        if (typeof userId !== 'string' || !UUID_RE.test(userId)) return send(res, 401, { status: 'UNAUTHORIZED' });
+        const ctx = await deps.store.loadContext(userId);
+        if (!ctx || ctx.isBanned) return send(res, 422, { status: 'ERROR', code: 'USER_BANNED', message: 'Профиль не найден или заблокирован' });
+        if (req.method === 'GET') return send(res, 200, await loadCabinetState(deps, ctx));
+        let content: Buffer;
+        try {
+          content = await readRaw(req, STUDY_CERTIFICATE_MAX_BYTES);
+        } catch {
+          return send(res, 413, { status: 'ERROR', code: 'INVALID_FIELD_VALUE', message: 'Файл справки больше 8 МБ.' });
+        }
+        let fileName = 'Справка об обучении';
+        try {
+          fileName = decodeURIComponent(String(req.headers['x-file-name'] ?? '')) || fileName;
+        } catch {
+          // имя файла в заголовке не в URL-кодировке — оставляем имя по умолчанию
+        }
+        try {
+          const meta = await saveStudyCertificate(deps, userId, fileName, content);
+          return send(res, 200, { status: 'OK', study_certificate: meta });
+        } catch (err) {
+          if (err instanceof PipelineFailure) return send(res, 422, { status: 'ERROR', code: err.code, message: err.message });
+          throw err;
+        }
       }
 
       if (req.method !== 'POST' || pathname !== '/pipeline') {

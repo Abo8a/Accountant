@@ -20,8 +20,11 @@ export interface RuleEngineResult {
 /**
  * extraStopFactors — проверки, которые считаются вне правил (смета, согласованность направления и вызова).
  */
+export const STUDY_CERTIFICATE_WARNING =
+  'Справка об обучении в вузе не загружена: без неё фонд не примет заявку. Загрузите её в профиле — паспорт можно готовить и до этого.';
+
 export function evaluatePassportRules(
-  founderData: { full_name?: string; status?: string } | null,
+  founderData: { full_name?: string; status?: string; education_status?: string; study_certificate_uploaded?: boolean } | null,
   records: RuleRecord[],
   allClaims: AuditableClaim[],
   program = 'Студенческий стартап',
@@ -35,8 +38,15 @@ export function evaluatePassportRules(
       stopFactors.push('Не заполнено ФИО заявителя в профиле основателя (Блок 1).');
       // Ключ ФИО везде один — full_name (см. contracts FOUNDER_FIELD_KEYS).
     }
-    if (!founderData?.status || !['student', 'postgraduate'].includes(founderData.status)) {
-      warnings.push('Для программы «Студенческий стартап» необходимо подтвердить статус обучающегося вуза.');
+    // Статус обучающегося подтверждает справка из вуза (загружается при регистрации). Без неё паспорт собирается,
+    // но заявку фонд не примет — это предупреждение, а не стоп-фактор.
+    if (founderData?.study_certificate_uploaded !== undefined) {
+      if (!founderData.study_certificate_uploaded) warnings.push(STUDY_CERTIFICATE_WARNING);
+    } else {
+      const status = founderData?.education_status ?? founderData?.status;
+      if (!status || !['student', 'postgraduate'].includes(status)) {
+        warnings.push('Для программы «Студенческий стартап» необходимо подтвердить статус обучающегося вуза.');
+      }
     }
   }
 

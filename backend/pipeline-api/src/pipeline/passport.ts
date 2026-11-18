@@ -13,6 +13,7 @@ import { fieldKb } from '../kb/manifest';
 import { wrapUntrustedData } from '../promptGuard';
 import { checkFieldValue, challengeDirectionMismatch, DIRECTION_CODES } from './fieldValidation';
 import { invalidateDependents, noteFieldChange } from './invalidation';
+import { hasForeignScript, studentFacingRemark } from './remarks';
 import { getRagDb } from '../rag/db';
 import { retrieveRagContext } from '../rag/retriever';
 import type { DirectionCode } from '../rag/types';
@@ -63,7 +64,14 @@ export async function writeClaims(
   sourcesById: Record<string, { extracted_text: string | null }>,
   validSourceIds: Set<string>,
 ): Promise<void> {
-  const raw: RawClaim[] = claims.map((c) => {
+  // Утверждение, которого нет дословно в тексте поля, — шум модели (пересказ, обрезка): сохранённое, оно стало бы orphaned,
+  // триггер БД снял бы с поля одобрение, и студента спросили бы о том же поле снова, хотя ответ принят.
+  const grounded = claims.filter((c) => {
+    const text = (c.claim_text ?? '').trim();
+    return text.length > 0 && value.includes(text);
+  });
+  if (grounded.length < claims.length) deps.logger.info(`[claims] отброшено утверждений без опоры в тексте поля: ${claims.length - grounded.length}`);
+  const raw: RawClaim[] = grounded.map((c) => {
     const sourceOk = !!c.source_id && validSourceIds.has(c.source_id);
     return {
       claim_text: c.claim_text,
@@ -86,10 +94,10 @@ export async function writeClaims(
   const drafts: ClaimDraft[] = auditedClaims.map((c, i) => ({
     claim_text: c.claim_text,
     claim_type: c.claim_type,
-    claim_kind: (claims[i]?.claim_kind ?? null) as ClaimKind | null,
+    claim_kind: (grounded[i]?.claim_kind ?? null) as ClaimKind | null,
     source_id: c.source_id,
     source_locator: c.source_locator,
-    confidence: claims[i]?.confidence ?? null,
+    confidence: grounded[i]?.confidence ?? null,
     span_start: c.span_start,
     span_end: c.span_end,
     order_index: c.order_index,
@@ -280,6 +288,7 @@ export async function extractPassport(
   const changed = changedSet ?? new Set<DependencyNode>();
   const processedKeys = new Set<string>();
   const openFieldKeys = new Set(open_fields.map((f) => `${f.section_id}/${f.field_key}`));
+  const suggested: Record<string, string> = {};
 
   for (const item of out.fields) {
     if (!isValidPassportField(item.section_id, item.field_key)) continue;
@@ -295,6 +304,11 @@ export async function extractPassport(
 
     const trimmed = item.value?.trim();
     if (!trimmed) continue;
+    // Направление и вызов выбирает студент: значение модели — только предложение, его покажут на подтверждение
+    if (isCodeField(item.section_id, item.field_key) && !isExplicitForm) {
+      suggested[item.field_key] = trimmed;
+      continue;
+    }
     // Заглушка вместо сведений = пустое поле (досбор спросит студента); у кодов направления и вызова заглушек не бывает
     const raw = isCodeField(item.section_id, item.field_key) ? trimmed : stripMetaStubs(trimmed);
     if (!raw) {
@@ -336,6 +350,8 @@ export async function extractPassport(
     const recordId = await deps.store.upsertField(projectId, item.section_id, item.field_key, value);
     await writeClaims(deps, recordId, value, item.claims ?? [], sourcesById, validSourceIds);
   }
+
+  await saveDirectionSuggestion(deps, projectId, suggested);
 
   // 5. Fallback для полей submit_form:
   // Если модель НЕ вернула какое-то из явно присланных в req.form полей, сохраняем исходное v.value
@@ -390,6 +406,37 @@ export async function extractPassport(
   }
 }
 
+export interface DirectionSuggestion {
+  direction: string;
+  tech_challenge: string | null;
+}
+
+const SUGGESTION_KEY = 'direction_suggestion';
+
+/** Сохраняет предложение модели (направление и подходящий ему вызов) в служебную секцию 0. Невалидное не сохраняется. */
+async function saveDirectionSuggestion(deps: PipelineDeps, projectId: string, suggested: Record<string, string>): Promise<void> {
+  const dir = checkFieldValue(4, 'direction', suggested.direction ?? '', deps.kb.tech_challenges);
+  if (!dir.ok) return;
+  let challenge: string | null = null;
+  if (suggested.tech_challenge && dir.value !== 'Н7') {
+    const ch = checkFieldValue(4, 'tech_challenge', suggested.tech_challenge, deps.kb.tech_challenges);
+    if (ch.ok && !challengeDirectionMismatch(dir.value, ch.value, deps.kb.tech_challenges)) challenge = ch.value;
+  }
+  const value: DirectionSuggestion = { direction: dir.value, tech_challenge: challenge };
+  await deps.store.upsertField(projectId, 0, SUGGESTION_KEY, JSON.stringify(value));
+}
+
+/** Предложение направления и вызова от сборки паспорта или null. */
+export function loadDirectionSuggestion(records: readonly RecordRow[]): DirectionSuggestion | null {
+  const raw = records.find((r) => r.section_id === 0 && r.field_key === SUGGESTION_KEY)?.value;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as DirectionSuggestion;
+  } catch {
+    return null;
+  }
+}
+
 export type AnswerResult = { ok: true } | { ok: false; reason: string };
 
 /** Формирует массив всех полей паспорта (разделы 2–10) для передачи на фронтенд. */
@@ -427,6 +474,7 @@ export async function answerField(
   target: TargetField,
   question: string,
   answer: string,
+  projectSummary: string | null = null,
 ): Promise<AnswerResult> {
   const kb = fieldKb(deps.kb, target.section_id, target.field_key);
 
@@ -457,23 +505,30 @@ export async function answerField(
     deps.logger.warn('[answerField] RAG context unavailable, proceeding without RAG:', err);
   }
 
-  const out = await callLlm(
-    deps.llm,
-    'validate_answer',
-    {
-      section_id: target.section_id,
-      field_key: target.field_key,
-      question,
-      criteria: kb.criteria,
-      answer: wrapUntrustedData('user_answer', answer),
-      rag_context: ragContextText,
-    },
-    validateSchema,
-  );
+  // Текущий текст поля: ответ на замечание обычно дописывает недостающее, а не пересказывает поле заново.
+  // Без него принятый ответ затирал уже принятые сведения (в живом прогоне — опыт двух участников команды из трёх).
+  const currentValue = existingRecords.find((r) => r.section_id === target.section_id && r.field_key === target.field_key)?.value?.trim() || null;
+  const input = {
+    section_id: target.section_id,
+    field_key: target.field_key,
+    question,
+    criteria: kb.criteria,
+    current_value: currentValue && !isCodeField(target.section_id, target.field_key) ? wrapUntrustedData('current_value', currentValue) : null,
+    project_summary: projectSummary,
+    answer: wrapUntrustedData('user_answer', answer),
+    rag_context: ragContextText,
+  };
+  let out = await callLlm(deps.llm, 'validate_answer', input, validateSchema);
+  // Модель изредка срывается в другой язык (в живом прогоне — китайское замечание): один повтор, затем нейтральный текст
+  if (hasForeignScript(out.rejection_reason) || hasForeignScript(out.formatted_value)) {
+    deps.logger.warn('[answerField] ответ валидатора не на русском, повтор');
+    out = await callLlm(deps.llm, 'validate_answer', input, validateSchema);
+  }
 
   const value = out.formatted_value?.trim();
-  if (!out.is_valid || !value) {
-    return { ok: false, reason: out.rejection_reason ?? 'Ответ не закрывает требование поля' };
+  if (!out.is_valid || !value || hasForeignScript(value)) {
+    const reason = hasForeignScript(out.rejection_reason) ? null : studentFacingRemark(out.rejection_reason);
+    return { ok: false, reason: reason ?? 'Ответ пока не закрывает вопрос поля. Опишите подробнее, опираясь на подсказку «Что проверяет фонд».' };
   }
   const code = checkFieldValue(target.section_id, target.field_key, value, deps.kb.tech_challenges);
   if (!code.ok) return { ok: false, reason: code.reason };

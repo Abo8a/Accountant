@@ -744,3 +744,24 @@ a.passport-claim.passport-claim--muted {
   background: var(--color-white);
   font: var(--font-semibold) var(--fs-15) var(--font-sans);
 }
+
+/* Справка об обучении в блоке 1 (живой режим). */
+.passport__cert-pick {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 40px;
+  padding: 0 var(--space-16);
+  border: 1px dashed var(--color-gray-300);
+  border-radius: var(--radius-input);
+  font-size: var(--fs-14);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.passport__cert-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}

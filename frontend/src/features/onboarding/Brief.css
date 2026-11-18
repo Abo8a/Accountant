@@ -462,3 +462,37 @@
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* Отказ по стоп-фактору после сборки: причина и что изменить (живой режим). Оформление — как отказ допуска (onb-reject). */
+.brief-refusal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: var(--space-20) var(--space-24);
+  border-radius: var(--radius-xl);
+  background: var(--color-danger-soft);
+  color: var(--color-danger-deep);
+}
+
+.brief-refusal__title {
+  margin: 0;
+  font-size: var(--fs-18);
+  font-weight: 700;
+}
+
+.brief-refusal__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.brief-refusal__reason,
+.brief-refusal__fix {
+  margin: 0;
+  font-size: var(--fs-15);
+  line-height: 1.5;
+}
+
+.brief-refusal__fix {
+  color: var(--color-ink);
+}

@@ -18,6 +18,7 @@ import { LoggedLlm } from '../llm/logged';
 import { screenStopFactors, stopFactorBriefQuestion } from './screen';
 
 const SHORT_ANSWER_CHARS = 150;
+const CODE_FIELDS = new Set(['4/direction', '4/tech_challenge']);
 
 /** Каждый вызов LLM в этом запросе пишется в журнал llm_call_log (блок 4). */
 export function withCallLogging(deps: PipelineDeps, userId: string | null): PipelineDeps {
@@ -148,12 +149,16 @@ async function handleExistingProject(deps: PipelineDeps, req: PipelineRequest, c
 
   // ШАГ 2 [AI Guard]: сверка нового ввода с якорем.
   // Ответ на точечный вопрос по блоку вне 3–4 с якорем не сравниваем (см. GUARDED_ANSWER_SECTIONS); новые файлы — всегда.
-  const answerOutsideAnchor = req.action === 'submit_answer' && !!target && !GUARDED_ANSWER_SECTIONS.has(target.section_id);
+  // Короткий ответ на точечный вопрос (и коды направления/вызова) тоже не сравниваем: в нём слишком мало текста для
+  // сходства с якорем — честный ответ «Н4 — новые приборы…» давал 0.35 и ложную блокировку. Чужую тему в ответе ловит
+  // валидатор ответа по выжимке проекта (мягко: отклоняет ответ, а не блокирует аккаунт).
+  const isAnswer = req.action === 'submit_answer' && !!target;
+  const answerSkipsGuard =
+    isAnswer && (!GUARDED_ANSWER_SECTIONS.has(target!.section_id) || CODE_FIELDS.has(`${target!.section_id}/${target!.field_key}`) || text.length < SHORT_ANSWER_CHARS);
   const filesText = added.map((s) => s.extracted_text ?? '').filter(Boolean).join('\n\n');
-  const guardText = answerOutsideAnchor ? filesText : newText;
+  const guardText = answerSkipsGuard ? filesText : newText;
   if (guardText && project.anchorReady) {
-    const isShortAnswer = !answerOutsideAnchor && text.length > 0 && text.length < SHORT_ANSWER_CHARS && !!req.previous_question;
-    const query = isShortAnswer ? `Вопрос по проекту: ${req.previous_question} Ответ: ${text}` : guardText;
+    const query = isAnswer && !answerSkipsGuard && req.previous_question ? `Вопрос по проекту: ${req.previous_question} Ответ: ${text}` : guardText;
     const embedding = await llm.embed(query.slice(0, GUARD_QUERY_MAX_CHARS));
     const guard = await store.guardCheck(projectId, embedding, guardText.slice(0, 500), ctx.thresholds);
     if (guard.action === 'blocked') {
@@ -173,7 +178,7 @@ async function handleExistingProject(deps: PipelineDeps, req: PipelineRequest, c
       return { status: 'ANSWER_REJECTED', step: 'ANSWER_VALIDATION', target_field: target, question, example: kb.example, rejection_reason: 'Ответ пустой' };
     }
     const prev = await store.getFieldValue(projectId, target.section_id, target.field_key);
-    const result = await answerField(deps, projectId, target, question, text);
+    const result = await answerField(deps, projectId, target, question, text, project.anchorSummary);
     if (!result.ok) {
       return {
         status: 'ANSWER_REJECTED',

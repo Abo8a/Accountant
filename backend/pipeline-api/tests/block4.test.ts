@@ -6,7 +6,7 @@ import { handlePipeline } from '../src/pipeline/handler';
 import { handleExport, type ExportSectionInput } from '../src/pipeline/export';
 import { FakeLlm } from '../src/llm/fake';
 import { createPipelineServer } from '../src/server';
-import { createTestDb, createUser, makeDeps, type TestDb } from './helpers';
+import { briefAndConfirm, createTestDb, createUser, makeDeps, type TestDb } from './helpers';
 import type { PipelineDeps } from '../src/pipeline/deps';
 
 const BRIEF =
@@ -74,7 +74,7 @@ async function completeProject(userId: string, extra: Record<string, any> = {}):
   const llm = new FakeLlm({ extract: fullExtraction, novelty, audit: approveAudit, ...extra });
   const deps = makeDeps(db, llm);
   await handlePipeline(deps, req(userId, { action: 'submit_form', budget_items: VALID_BUDGET }));
-  const res = await handlePipeline(deps, req(userId, { text_input: BRIEF }));
+  const res = await briefAndConfirm(deps, req(userId, { text_input: BRIEF }));
   return { deps, res };
 }
 

@@ -1,4 +1,6 @@
-import { useCallback, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
+import { useCabinetState } from '../../shared/state/cabinet';
+import { fetchMe } from '../../shared/api/auth';
 import { useCabinetShell } from '../../shared/layout/CabinetLayout';
 import { DEFAULT_PLAN_ID, FLAGS } from '../../shared/config/flags';
 import {
@@ -22,6 +24,12 @@ type PaidPlanId = 'pro' | 'premium';
 type PayResult = 'ok' | 'fail' | 'pending';
 
 export interface BillingProps {
+  /** Текущая подписка (живой режим — из состояния пользователя; по умолчанию — пример из макета). */
+  subscription?: { validUntil: string; daysLeft: number; filesUsed: number; filesLimit: number };
+  /** Почта для чека. */
+  email?: string;
+  /** Показывать историю платежей (демо-строки из макета). В живом режиме платежей пока нет. */
+  showHistory?: boolean;
   /** Текущий тариф. По умолчанию — DEFAULT_PLAN_ID (премиум, решение владельца). free — подписка закончилась. */
   currentPlan?: PlanId;
 }
@@ -54,13 +62,38 @@ const PREVIOUS_PAYMENT = { date: '1 ноября 2026', plan: 'Професси�
 
 const PRO = getPlan('pro');
 
+/** Живой режим: тариф и срок подписки пользователя вместо примера из макета. */
+export function LiveBilling() {
+  const state = useCabinetState();
+  const [email, setEmail] = useState('');
+  useEffect(() => {
+    void fetchMe().then((me) => setEmail(me?.email ?? ''));
+  }, []);
+  if (!state) return null;
+  const until = state.plan_expires_at ? new Date(state.plan_expires_at) : null;
+  const daysLeft = until ? Math.max(0, Math.ceil((until.getTime() - Date.now()) / 86_400_000)) : 0;
+  return (
+    <Billing
+      currentPlan={state.plan_id}
+      email={email}
+      showHistory={false}
+      subscription={{
+        validUntil: until ? until.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).replace(/\s*г\.$/, '') : '',
+        daysLeft,
+        filesUsed: state.files_used,
+        filesLimit: state.files_limit,
+      }}
+    />
+  );
+}
+
 const PAY_STATUS: Record<PayResult, { label: string; chip: string }> = {
   ok: { label: 'Оплачен', chip: 'billing__chip--ok' },
   fail: { label: 'Не прошёл', chip: 'billing__chip--fail' },
   pending: { label: 'Ожидает', chip: 'billing__chip--pending' },
 };
 
-export function Billing({ currentPlan = DEFAULT_PLAN_ID }: BillingProps = {}) {
+export function Billing({ currentPlan = DEFAULT_PLAN_ID, subscription = SUBSCRIPTION, email = CHECKOUT_EMAIL, showHistory = true }: BillingProps = {}) {
   // Отступы main из эталона Billing.dc.html (36px 48px 64px); остальное — значения шелла по умолчанию.
   useCabinetShell({ mainPadding: 'var(--space-36) var(--space-48) var(--space-64)' });
 
@@ -77,7 +110,7 @@ export function Billing({ currentPlan = DEFAULT_PLAN_ID }: BillingProps = {}) {
 
   const isFree = currentPlan === 'free';
   const currentPlanName = getPlan(currentPlan).name;
-  const actions = planActions(currentPlan, SUBSCRIPTION.daysLeft);
+  const actions = planActions(currentPlan, subscription.daysLeft);
 
   const chosenPlan = PAID_PLANS[chosen];
 
@@ -172,7 +205,7 @@ export function Billing({ currentPlan = DEFAULT_PLAN_ID }: BillingProps = {}) {
           <span className="billing__hero-sub">
             {isFree
               ? BASIC.description
-              : `Действует до ${SUBSCRIPTION.validUntil} · осталось ${SUBSCRIPTION.daysLeft} ${pluralDays(SUBSCRIPTION.daysLeft)}`}
+              : `Действует до ${subscription.validUntil} · осталось ${subscription.daysLeft} ${pluralDays(subscription.daysLeft)}`}
           </span>
         </div>
         {!isFree && (
@@ -218,6 +251,7 @@ export function Billing({ currentPlan = DEFAULT_PLAN_ID }: BillingProps = {}) {
         </div>
       </section>
 
+      {showHistory && (
       <section className="billing__section">
         <h2 className="billing__section-title">История платежей</h2>
         <div className="billing__table-wrap">
@@ -261,6 +295,7 @@ export function Billing({ currentPlan = DEFAULT_PLAN_ID }: BillingProps = {}) {
           </table>
         </div>
       </section>
+      )}
 
       {checkoutOpen && (
         <div className="billing__overlay">
@@ -286,7 +321,7 @@ export function Billing({ currentPlan = DEFAULT_PLAN_ID }: BillingProps = {}) {
               <dd className="billing__total-value">{chosenPlan.price}</dd>
             </dl>
             <p className="billing__legal">
-              Вы перейдёте на защищённую страницу ЮKassa. Автопродления нет. Чек придёт на {CHECKOUT_EMAIL}.
+              Вы перейдёте на защищённую страницу ЮKassa. Автопродления нет. Чек придёт на {email}.
             </p>
             <button type="button" className="billing__pay" onClick={() => pay('ok')}>
               Перейти к оплате

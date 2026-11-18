@@ -291,71 +291,41 @@ describe('Этап 3: Сборка и упаковка открытых блок
   // ---------------------------------------------------------------------------
   // Тест 4 (Автоподбор tech_challenge и защита направления)
   // ---------------------------------------------------------------------------
-  it('Тест 4: вызов сохраняется только при совпадении с направлением, а для чужого направления и Н7 отсекается', async () => {
-    const userId = await createUser(db.sql, { name: 'Сергей Кузнецов' });
-    const projectId = await db.store.ensureProject(userId);
+  it('Тест 4: направление и вызов от модели — только предложение; вызов чужого направления и для Н7 не предлагается', async () => {
+    const suggestionOf = async (projectId: string) => {
+      const { rows } = await db.sql.query(
+        `SELECT section_id, field_key, value FROM project_passport_records WHERE project_id = $1::uuid AND (section_id = 4 AND field_key IN ('direction', 'tech_challenge') OR section_id = 0 AND field_key = 'direction_suggestion')`,
+        [projectId],
+      );
+      const fields = rows.filter((r: any) => r.section_id === 4);
+      const raw = rows.find((r: any) => r.section_id === 0)?.value;
+      return { fields, suggestion: raw ? JSON.parse(raw) : null };
+    };
+    const extractWith = async (name: string, direction: string, challenge: string) => {
+      const projectId = await db.store.ensureProject(await createUser(db.sql, { name }));
+      const llm = new FakeLlm({
+        extract: () => ({
+          fields: [
+            { section_id: 4, field_key: 'direction', value: direction, claims: [] },
+            { section_id: 4, field_key: 'tech_challenge', value: challenge, claims: [] },
+          ],
+        }),
+      });
+      await extractPassport(makeDeps(db, llm), projectId, 'Студенческий стартап', `Бриф ${direction}`, []);
+      return suggestionOf(projectId);
+    };
 
-    // 4a. Направление Н1 + вызов № 54 (ООО «Вебпрактик» — направление Н1) -> сохраняется
-    const llmValid = new FakeLlm({
-      extract: () => ({
-        fields: [
-          { section_id: 4, field_key: 'direction', value: 'Н1', claims: [] },
-          { section_id: 4, field_key: 'tech_challenge', value: '54', claims: [] },
-        ],
-      }),
-    });
-    await extractPassport(makeDeps(db, llmValid), projectId, 'Студенческий стартап', 'Бриф Н1', []);
+    // 4a. Н1 + вызов № 54 (Н1): в паспорт не пишется, сохраняется как предложение студенту
+    const valid = await extractWith('Сергей Кузнецов', 'Н1', '54');
+    expect(valid.fields).toEqual([]);
+    expect(valid.suggestion).toEqual({ direction: 'Н1', tech_challenge: '54' });
 
-    const { rows: validRows } = await db.sql.query(
-      `SELECT field_key, value FROM project_passport_records WHERE project_id = $1::uuid AND section_id = 4 AND field_key IN ('direction', 'tech_challenge')`,
-      [projectId],
-    );
-    const validMap = Object.fromEntries(validRows.map((r: any) => [r.field_key, r.value]));
-    expect(validMap['direction']).toBe('Н1');
-    expect(validMap['tech_challenge']).toBe('54');
+    // 4b. Н2, но вызов № 54 относится к Н1 — вызов не предлагается
+    const mismatch = await extractWith('Игорь Орлов', 'Н2', '54');
+    expect(mismatch.suggestion).toEqual({ direction: 'Н2', tech_challenge: null });
 
-    // 4b. Направление Н2, но модель вернула вызов № 54 (который относится к Н1) -> отсекается
-    const user2 = await createUser(db.sql, { name: 'Игорь Орлов' });
-    const proj2 = await db.store.ensureProject(user2);
-
-    const llmMismatch = new FakeLlm({
-      extract: () => ({
-        fields: [
-          { section_id: 4, field_key: 'direction', value: 'Н2', claims: [] },
-          { section_id: 4, field_key: 'tech_challenge', value: '54', claims: [] }, // Вызов от Н1!
-        ],
-      }),
-    });
-    await extractPassport(makeDeps(db, llmMismatch), proj2, 'Студенческий стартап', 'Бриф Н2', []);
-
-    const { rows: mismatchRows } = await db.sql.query(
-      `SELECT field_key, value FROM project_passport_records WHERE project_id = $1::uuid AND section_id = 4 AND field_key IN ('direction', 'tech_challenge')`,
-      [proj2],
-    );
-    const mismatchMap = Object.fromEntries(mismatchRows.map((r: any) => [r.field_key, r.value]));
-    expect(mismatchMap['direction']).toBe('Н2');
-    expect(mismatchMap['tech_challenge']).toBeUndefined(); // Не сохранён!
-
-    // 4c. Направление Н7 (биотех / креативные индустрии, в TechLead8 нет вызовов для Н7) -> отсекается
-    const user3 = await createUser(db.sql, { name: 'Мария Павлова' });
-    const proj3 = await db.store.ensureProject(user3);
-
-    const llmN7 = new FakeLlm({
-      extract: () => ({
-        fields: [
-          { section_id: 4, field_key: 'direction', value: 'Н7', claims: [] },
-          { section_id: 4, field_key: 'tech_challenge', value: '1', claims: [] },
-        ],
-      }),
-    });
-    await extractPassport(makeDeps(db, llmN7), proj3, 'Студенческий стартап', 'Бриф Н7', []);
-
-    const { rows: n7Rows } = await db.sql.query(
-      `SELECT field_key, value FROM project_passport_records WHERE project_id = $1::uuid AND section_id = 4 AND field_key IN ('direction', 'tech_challenge')`,
-      [proj3],
-    );
-    const n7Map = Object.fromEntries(n7Rows.map((r: any) => [r.field_key, r.value]));
-    expect(n7Map['direction']).toBe('Н7');
-    expect(n7Map['tech_challenge']).toBeUndefined(); // Не сохранён для Н7!
-  }, 30000);
+    // 4c. Н7: в перечне нет вызовов для Н7
+    const n7 = await extractWith('Мария Павлова', 'Н7', '1');
+    expect(n7.suggestion).toEqual({ direction: 'Н7', tech_challenge: null });
+  }, 120_000);
 });

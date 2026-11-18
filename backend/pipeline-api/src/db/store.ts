@@ -9,6 +9,12 @@ import { retrieveRagContext } from '../rag/retriever';
 export interface UserContext {
   /** ФИО всегда в ключе full_name (см. normalizeFounder). */
   founderData: Record<string, any> & { full_name?: string };
+  /** Загруженная справка об обучении (без содержимого) или null. */
+  studyCertificate: StudyCertificateMeta | null;
+  /** Действующий тариф: free, pro, premium. */
+  planId: string;
+  /** Окончание оплаченного тарифа (null — бесплатный). */
+  planExpiresAt: string | null;
   isBanned: boolean;
   features: { ai_parsing?: boolean; novelty_check?: boolean; consultant?: boolean };
   fileUploadsLimit: number;
@@ -17,9 +23,17 @@ export interface UserContext {
   project: ProjectInfo | null;
 }
 
+export interface StudyCertificateMeta {
+  file_name: string;
+  size_bytes: number;
+  uploaded_at: string;
+}
+
 export interface ProjectInfo {
   id: string;
   briefText: string;
+  /** Выжимка проекта из якоря (null, пока якорь не создан): по ней валидатор понимает, про этот ли проект ответ. */
+  anchorSummary: string | null;
   /** anchor_status = 'ready' и есть эмбеддинг. Иначе проект считается «новым» (холодный старт). */
   anchorReady: boolean;
   /** В паспорте уже есть хотя бы одна запись (поле извлечено или введено). Маршрутизация идёт по этому признаку, а не по якорю. */
@@ -95,6 +109,11 @@ export interface ClaimDraft {
 
 const CONTEXT_SQL = `
 SELECT p.founder_data, p.is_banned,
+       COALESCE(pl.id, 'free')                       AS plan_id,
+       sub.expires_at                                AS plan_expires_at,
+       (SELECT jsonb_build_object('file_name', d.file_name, 'size_bytes', d.size_bytes, 'uploaded_at', d.created_at)
+          FROM app_user_documents d
+         WHERE d.user_id = p.id AND d.kind = 'study_certificate') AS study_certificate,
        COALESCE(pl.features, '{}'::jsonb)            AS features,
        COALESCE(pl.file_uploads_limit, 0)            AS file_uploads_limit,
        (SELECT COUNT(*)::int
@@ -103,6 +122,7 @@ SELECT p.founder_data, p.is_banned,
          WHERE ap.user_id = p.id)                    AS uploaded_count,
        pr.id                                         AS project_id,
        pr.brief_text,
+       pr.anchor_summary,
        pr.status                                     AS project_status,
        pr.eligibility_answers                        AS eligibility_answers,
        (pr.anchor_status = 'ready' AND pr.anchor_embedding IS NOT NULL) AS anchor_ready,
@@ -111,7 +131,7 @@ SELECT p.founder_data, p.is_banned,
        st.guard_threshold_warn
 FROM app_profiles p
 LEFT JOIN LATERAL (
-    SELECT bs.plan_id
+    SELECT bs.plan_id, bs.expires_at
       FROM billing_subscriptions bs
      WHERE bs.user_id = p.id AND bs.expires_at > now()
      ORDER BY bs.expires_at DESC
@@ -131,6 +151,9 @@ export class PassportStore {
     if (!r) return null;
     return {
       founderData: normalizeFounder(r.founder_data),
+      studyCertificate: r.study_certificate ?? null,
+      planId: String(r.plan_id ?? 'free'),
+      planExpiresAt: r.plan_expires_at ? new Date(r.plan_expires_at).toISOString() : null,
       isBanned: Boolean(r.is_banned),
       features: r.features ?? {},
       fileUploadsLimit: Number(r.file_uploads_limit),
@@ -140,6 +163,7 @@ export class PassportStore {
         ? {
             id: r.project_id,
             briefText: r.brief_text ?? '',
+            anchorSummary: r.anchor_summary ?? null,
             anchorReady: Boolean(r.anchor_ready),
             hasRecords: Boolean(r.has_records),
             status: r.project_status,
@@ -363,6 +387,23 @@ export class PassportStore {
   }
 
   /** Сохранение данных основателя (блок 1 паспорта): поля сливаются с уже сохранёнными. */
+  /** Справка об обучении: одна на пользователя, новая загрузка заменяет прежнюю. */
+  async saveStudyCertificate(
+    userId: string,
+    doc: { file_name: string; mime_type: string; sha256_hash: string; content: Buffer },
+  ): Promise<StudyCertificateMeta> {
+    const { rows } = await this.sql.query(
+      `INSERT INTO app_user_documents (user_id, kind, file_name, mime_type, size_bytes, sha256_hash, content)
+       VALUES ($1::uuid, 'study_certificate', $2, $3, $4, $5, $6)
+       ON CONFLICT (user_id, kind) DO UPDATE
+         SET file_name = EXCLUDED.file_name, mime_type = EXCLUDED.mime_type, size_bytes = EXCLUDED.size_bytes,
+             sha256_hash = EXCLUDED.sha256_hash, content = EXCLUDED.content, created_at = now()
+       RETURNING file_name, size_bytes, created_at AS uploaded_at`,
+      [userId, doc.file_name, doc.mime_type, doc.content.length, doc.sha256_hash, doc.content],
+    );
+    return rows[0] as StudyCertificateMeta;
+  }
+
   async updateFounderData(userId: string, data: Record<string, string>): Promise<void> {
     await this.sql.query('UPDATE app_profiles SET founder_data = founder_data || $2::jsonb WHERE id = $1::uuid', [userId, JSON.stringify(data)]);
   }

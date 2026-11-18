@@ -32,9 +32,33 @@ describe('LiveGaps (живые пробелы)', () => {
     mockPipeline.mockReset();
   });
 
-  it('без ответа пайплайна просит начать с брифа', () => {
+  it('без ответа в этой вкладке спрашивает текущий шаг у пайплайна; проекта нет — просит начать с брифа', async () => {
+    mockPipeline.mockResolvedValue({ status: 'WAITING_FOR_INITIAL_BRIEF', step: 'INITIAL_BRIEF', question: 'Опишите проект', example: '' });
     renderGaps(undefined);
-    expect(screen.getByText('Сначала опишите проект.')).toBeInTheDocument();
+    expect(mockPipeline).toHaveBeenCalledWith({ action: 'init_or_upload' });
+    expect(await screen.findByText('Сначала опишите проект.')).toBeInTheDocument();
+  });
+
+  it('без ответа в этой вкладке показывает текущий пробел из пайплайна', async () => {
+    mockPipeline.mockResolvedValue(GAP);
+    renderGaps(undefined);
+    expect(await screen.findByText('Кто целевые пользователи?')).toBeInTheDocument();
+  });
+
+  it('отклонённый ответ остаётся в поле вместе с замечанием', async () => {
+    mockPipeline.mockResolvedValue({
+      status: 'ANSWER_REJECTED',
+      step: 'ANSWER_VALIDATION',
+      target_field: GAP.status === 'NEED_USER_INPUT' ? GAP.target_field : undefined,
+      question: 'Кто целевые пользователи?',
+      example: '',
+      rejection_reason: 'Уточните сегмент: какие студенты и в каком городе.',
+    } as PipelineResponse);
+    renderGaps(GAP);
+    await userEvent.type(screen.getByLabelText('Ваш ответ'), 'Студенты');
+    await userEvent.click(screen.getByRole('button', { name: 'Отправить ответ' }));
+    expect(await screen.findByText('Уточните сегмент: какие студенты и в каком городе.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Ваш ответ')).toHaveValue('Студенты');
   });
 
   it('показывает вопрос пайплайна и пример', () => {
@@ -112,6 +136,17 @@ describe('LiveGaps (живые пробелы)', () => {
     expect(screen.getAllByRole('group', { name: 'Направление проекта' }).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Сохранить направление' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Ваш ответ')).not.toBeInTheDocument();
+  });
+
+  it('предложение направления и вызова показано вопросом и выбрано заранее — студент подтверждает или меняет', () => {
+    renderGaps({
+      ...GAP,
+      target_field: { section_id: 4, field_key: 'direction' },
+      question: 'По описанию проекта подходит направление Н4. Подходит ли оно вам?',
+      suggestion: { direction: 'Н4', tech_challenge: null },
+    } as PipelineResponse);
+    expect(screen.getByText('По описанию проекта подходит направление Н4. Подходит ли оно вам?')).toBeInTheDocument();
+    expect(screen.getByText(/Н4\. Новые приборы/)).toBeInTheDocument();
   });
 
   it('шаг сметы показывает таблицу сметы', () => {

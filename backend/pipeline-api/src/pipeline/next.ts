@@ -5,7 +5,7 @@ import { PASSPORT_SECTIONS, type PipelineQuestion, type PipelineResponse, type T
 import { fieldKb } from '../kb/manifest';
 import type { BudgetRow, RecordRow, UserContext } from '../db/store';
 import type { PipelineDeps } from './deps';
-import { findGaps, buildPassportFields } from './passport';
+import { findGaps, buildPassportFields, loadDirectionSuggestion, type DirectionSuggestion } from './passport';
 import { noveltyAndFinalize } from './finalize';
 import { auditFingerprint, auditPassport, loadAuditReport, type AuditReport, type AuditScope } from './audit';
 import { anchorBriefFromRecords, createAnchor } from './anchor';
@@ -34,6 +34,13 @@ export async function nextStep(
     if (gap) return gapQuestion(deps, gap, records, previous ?? undefined);
   }
 
+  // Направление (и вызов) студент выбирает до первичного аудита: от направления зависят правила и примеры аудита,
+  // а предложение модели без подтверждения в паспорт не пишется. Вопрос без вызова модели.
+  const direction: TargetField = { section_id: 4, field_key: 'direction' };
+  if (!previous?.fingerprint && isEmptyField(records, direction) && !skipped.has(gapKey(direction))) {
+    return gapQuestion(deps, direction, records, undefined);
+  }
+
   // Первичный аудит — один раз; дальше точечный ре-аудит только того, что изменилось с прошлого аудита.
   // Ничего не изменилось или студент ещё дорабатывает блок — вопрос без вызова модели, с замечаниями прошлого аудита.
   let auditReport: AuditReport;
@@ -45,7 +52,7 @@ export async function nextStep(
   }
   records = await deps.store.getRecords(projectId);
 
-  const open = fatalFirst(findGaps(records), auditReport);
+  const open = fatalFirst(studentGaps(records, auditReport), auditReport);
   const gap = open.find((g) => !skipped.has(gapKey(g)));
   if (gap) return gapQuestion(deps, gap, records, auditReport);
   // Остались только пропущенные пробелы: не идём дальше к смете и новизне, пока пользователь не вернётся.
@@ -85,22 +92,41 @@ export function planReaudit(
     [...changedFields].filter((k) => valueOf(now.fields[k]) !== valueOf(before.fields[k])).map((k) => Number(k.split('/')[0])),
   );
 
-  const waiting = findGaps([...records]).filter((g) => !changedFields.has(gapKey(g)) || isEmptyField(records, g));
+  const waiting = studentGaps(records, previous).filter((g) => !changedFields.has(gapKey(g)) || isEmptyField(records, g));
   const isReady = (sid: number) => !waiting.some((g) => g.section_id === sid);
   const studentStillAnswering = waiting.some((g) => !skipped.has(gapKey(g)));
 
+  // Одобренные блоки, с которых сняли одобрение правкой связанного блока: ждут ре-аудита, даже если прошлый аудит
+  // уже записал их новый статус в слепок (иначе они остались бы неодобренными навсегда)
+  const awaiting = new Set(
+    previous.block_audits
+      .filter((b) => b.status === 'approved')
+      .map((b) => b.section_id)
+      .filter((sid) => records.some((r) => r.section_id === sid && r.review_status !== 'approved' && !!r.value?.trim())),
+  );
+
   let sections: Set<number>;
   if (!studentStillAnswering) {
-    sections = changedSections;
+    sections = new Set([...changedSections, ...awaiting]);
   } else {
     // Доработанные блоки + размороженные ими связанные (проверяются вместе с блоком-причиной, а не после каждого ответа)
     const readyEdited = [...editedSections].filter(isReady);
-    const unfrozen = [...changedSections].filter((sid) => !editedSections.has(sid) && isReady(sid));
+    const unfrozen = [...new Set([...changedSections, ...awaiting])].filter((sid) => !editedSections.has(sid) && isReady(sid));
     sections = new Set(readyEdited.length > 0 ? [...readyEdited, ...unfrozen] : []);
   }
   const budget = now.budget !== before.budget;
   if (sections.size === 0 && !budget) return null;
   return { sections, budget, previous };
+}
+
+/**
+ * Пробелы, на которые должен ответить студент. Поле одобренного блока, с которого сняли одобрение из-за правки связанного блока
+ * (карта зависимостей), — не пробел: замечаний к нему нет, студенту нечего исправлять. Такой блок ждёт точечного ре-аудита
+ * (planReaudit) и спрашивается, только если ре-аудит найдёт в нём проблему.
+ */
+export function studentGaps(records: readonly RecordRow[], report: AuditReport | null | undefined): TargetField[] {
+  const approvedBlocks = new Set((report?.block_audits ?? []).filter((b) => b.status === 'approved').map((b) => b.section_id));
+  return findGaps([...records]).filter((g) => !(approvedBlocks.has(g.section_id) && !isEmptyField(records, g)));
 }
 
 function isEmptyField(records: readonly RecordRow[], gap: TargetField): boolean {
@@ -152,13 +178,16 @@ function gapQuestion(
 ): PipelineQuestion {
   const kb = fieldKb(deps.kb, gap.section_id, gap.field_key);
   const blockAudit = auditReport?.block_audits.find((b) => b.section_id === gap.section_id);
+  const isDirection = gap.section_id === 4 && (gap.field_key === 'direction' || gap.field_key === 'tech_challenge');
+  const suggestion = isDirection ? loadDirectionSuggestion(records) : null;
   return {
     status: 'NEED_USER_INPUT',
     step: 'GAP_FILLING',
     target_field: gap,
-    question: kb.question,
+    question: suggestion ? suggestionQuestion(deps, suggestion) : kb.question,
     example: kb.example,
     criteria: kb.criteria,
+    ...(suggestion ? { suggestion } : {}),
     rejection_reason: blockAudit?.remark ?? null,
     block_audits: auditReport?.block_audits,
     budget_audit: auditReport?.budget_audit,
@@ -166,6 +195,31 @@ function gapQuestion(
     passport: buildPassportFields(records),
   };
 }
+
+/** Вопрос-подтверждение: какое направление и вызов предлагаем и почему студент решает сам. */
+function suggestionQuestion(deps: PipelineDeps, s: DirectionSuggestion): string {
+  const name = deps.kb.tech_challenges.find((c) => c.direction === s.direction)?.direction_full ?? DIRECTION_NAMES[s.direction] ?? '';
+  const dir = `${s.direction}${name ? ` «${name}»` : ''}`;
+  const ch = s.tech_challenge ? deps.kb.tech_challenges.find((c) => String(c.number) === s.tech_challenge) : undefined;
+  if (ch) {
+    return (
+      `По описанию проекта подходит направление ${dir} и технологический вызов № ${ch.number} «${ch.topic}» (${ch.partner}). ` +
+      'Подходят ли они вам? Вызов необязателен: его можно сменить или оставить проект без вызова.'
+    );
+  }
+  return `По описанию проекта подходит направление ${dir}. Подходит ли оно вам? При желании выберите и технологический вызов — он необязателен.`;
+}
+
+/** Названия направлений на случай, если в перечне вызовов нет ни одного вызова направления (Н7). */
+const DIRECTION_NAMES: Record<string, string> = {
+  Н1: 'Цифровые технологии',
+  Н2: 'Медицина и технологии здоровьесбережения',
+  Н3: 'Новые материалы и химические технологии',
+  Н4: 'Новые приборы и интеллектуальные производственные технологии',
+  Н5: 'Биотехнологии',
+  Н6: 'Ресурсосберегающая энергетика',
+  Н7: 'Креативные индустрии',
+};
 
 function budgetQuestion(records: RecordRow[], auditReport: AuditReport): PipelineQuestion {
   const budget = auditReport.budget_audit;

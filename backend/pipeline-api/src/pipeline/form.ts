@@ -7,13 +7,47 @@ import { PipelineFailure } from '../errors';
 import type { UserContext } from '../db/store';
 import type { PipelineDeps } from './deps';
 import { GUARD_QUERY_MAX_CHARS, GUARDED_ANSWER_SECTIONS } from './anchor';
-import { checkFieldValue } from './fieldValidation';
-import { invalidateDependents } from './invalidation';
+import { challengeDirectionMismatch, checkFieldValue } from './fieldValidation';
+import { invalidateDependents, noteFieldChange } from './invalidation';
 import { extractPassport } from './passport';
 import { nextStep, skippedKeys } from './next';
 
 /** Поля с кодами (направление, номер вызова) не участвуют в guard: это не текст о проекте. */
 const CODE_FIELDS = new Set(['direction', 'tech_challenge']);
+
+/**
+ * Выбор студента «направление + вызов». Направление без вызова = «без вызова»: прежний вызов снимается
+ * (иначе остался бы вызов чужого направления). Вызов чужого направления не принимается.
+ */
+async function writeDirectionChoice(
+  deps: PipelineDeps,
+  projectId: string,
+  values: { section_id: number; field_key: string; value: string }[],
+  changed: Set<DependencyNode>,
+): Promise<void> {
+  const { store, kb } = deps;
+  const direction = values.find((v) => v.field_key === 'direction')?.value ?? (await store.getFieldValue(projectId, 4, 'direction'));
+  const challenge = values.find((v) => v.field_key === 'tech_challenge')?.value ?? null;
+  if (challenge) {
+    if (!direction || direction === 'Н7') {
+      throw new PipelineFailure('INVALID_FIELD_VALUE', 'Сначала выберите направление Н1–Н6: для Н7 технологических вызовов нет.');
+    }
+    const mismatch = challengeDirectionMismatch(direction, challenge, kb.tech_challenges);
+    if (mismatch) throw new PipelineFailure('INVALID_FIELD_VALUE', mismatch);
+  }
+  const writes = [...values];
+  const directionGiven = values.some((v) => v.field_key === 'direction');
+  if (directionGiven && !challenge && (await store.getFieldValue(projectId, 4, 'tech_challenge'))?.trim()) {
+    writes.push({ section_id: 4, field_key: 'tech_challenge', value: '' });
+  }
+  for (const w of writes) {
+    const prev = await store.getFieldValue(projectId, 4, w.field_key);
+    if ((prev ?? '') === w.value) continue;
+    if (w.field_key === 'direction') noteFieldChange(prev, w.value, 4, changed);
+    const recordId = await store.upsertField(projectId, 4, w.field_key, w.value);
+    await store.replaceClaims(recordId, []);
+  }
+}
 
 export async function handleSubmitForm(deps: PipelineDeps, req: PipelineRequest, ctx: UserContext): Promise<PipelineResponse> {
   const { store, llm, kb } = deps;
@@ -60,9 +94,13 @@ export async function handleSubmitForm(deps: PipelineDeps, req: PipelineRequest,
   }
 
 
-  // 4. Упаковка и запись полей через DeepSeek (extractPassport).
+  // 4. Упаковка и запись полей через DeepSeek (extractPassport). Выбор направления и вызова — коды, их пишем напрямую:
+  // переписывать нечего, а вызов модели здесь только тратил время и мог «предложить» вызов вместо студента.
   const changed = new Set<DependencyNode>();
-  if (values.length > 0) {
+  const codeOnly = values.length > 0 && values.every((v) => v.section_id === 4 && CODE_FIELDS.has(v.field_key));
+  if (codeOnly) {
+    await writeDirectionChoice(deps, projectId, values, changed);
+  } else if (values.length > 0) {
     const sources = await store.listSources(projectId);
     await extractPassport(deps, projectId, req.program, '', sources, values, changed);
   }

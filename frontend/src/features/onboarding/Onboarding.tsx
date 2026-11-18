@@ -1,8 +1,10 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { env } from '../../shared/config/env';
 import { callPassportPipeline } from '../../shared/api/pipeline';
 import { saveFounder } from '../../shared/api/profile';
+import { fetchMe } from '../../shared/api/auth';
+import { STUDY_CERTIFICATE_ACCEPT, uploadStudyCertificate, type StudyCertificate } from '../../shared/api/cabinet';
 import { saveFlow } from '../../shared/state/flow';
 import { OnboardingHeader } from './OnboardingHeader';
 import './common.css';
@@ -110,7 +112,32 @@ export function Onboarding() {
   const navigate = useNavigate();
   const [studying, setStudying] = useState(true);
   const [noMiddle, setNoMiddle] = useState(false);
-  const [middleName, setMiddleName] = useState('Иванович');
+  // Значения-пример из макета — только в демо-режиме; в живом поля пустые.
+  const [middleName, setMiddleName] = useState(env.liveApi ? '' : 'Иванович');
+  const [email, setEmail] = useState(env.liveApi ? '' : 'ivan@university.ru');
+  // Справка об обучении: обязательна для подачи в фонд, но паспорт готовится и без неё — загрузка не блокирует шаг.
+  const [certificate, setCertificate] = useState<StudyCertificate | null>(null);
+  const [certificateBusy, setCertificateBusy] = useState(false);
+  const [certificateError, setCertificateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!env.liveApi) return;
+    void fetchMe().then((me) => {
+      if (me) setEmail(me.email);
+    });
+  }, []);
+
+  const onCertificate = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setCertificateError(null);
+    setCertificateBusy(true);
+    const res = await uploadStudyCertificate(file);
+    setCertificateBusy(false);
+    if (res.ok) setCertificate(res.certificate);
+    else setCertificateError(res.message);
+  };
   const [understood, setUnderstood] = useState(true);
   const [answers, setAnswers] = useState<Record<string, boolean>>({});
   const [rejected, setRejected] = useState<RejectReason[] | null>(null);
@@ -137,7 +164,11 @@ export function Onboarding() {
     const founder = {
       full_name: [value('lastName'), value('firstName'), noMiddle ? '' : middleName.trim()].filter(Boolean).join(' '),
       contacts: [value('phone'), value('tg')].filter(Boolean).join(', ') || undefined,
-      university: value('uni') || undefined,
+      education_status: studying ? (value('level') === 'Аспирантура' ? ('postgraduate' as const) : ('student' as const)) : undefined,
+      university: (studying && value('uni')) || undefined,
+      study_level: (studying && value('level')) || undefined,
+      course: (studying && value('course')) || undefined,
+      region: value('region') || undefined,
     };
     setSaveError(null);
     setBusy(true);
@@ -208,7 +239,7 @@ export function Onboarding() {
   if (rejected) {
     return (
       <div className="ob-page">
-        <OnboardingHeader current={1} trailing={<span className="obh__email">ivan@university.ru</span>} />
+        <OnboardingHeader current={1} trailing={<span className="obh__email">{email}</span>} />
         <main className="onb-main onb-main--stack">
           {heading}
           <section role="alert" className="onb-reject">
@@ -248,7 +279,7 @@ export function Onboarding() {
 
   return (
     <div className="ob-page">
-      <OnboardingHeader current={1} trailing={<span className="obh__email">ivan@university.ru</span>} />
+      <OnboardingHeader current={1} trailing={<span className="obh__email">{email}</span>} />
       <main className="onb-main">
         <form className="onb-form" onSubmit={onSubmit}>
           {heading}
@@ -260,13 +291,13 @@ export function Onboarding() {
                   <label htmlFor="lastName" className="ob-label">
                     Фамилия<span aria-hidden="true" className="ob-required"> *</span>
                   </label>
-                  <input id="lastName" className="ob-input" required aria-required="true" type="text" defaultValue="Иванов" autoComplete="family-name" />
+                  <input id="lastName" className="ob-input" required aria-required="true" type="text" defaultValue={env.liveApi ? undefined : 'Иванов'} autoComplete="family-name" />
                 </div>
                 <div className="ob-field">
                   <label htmlFor="firstName" className="ob-label">
                     Имя<span aria-hidden="true" className="ob-required"> *</span>
                   </label>
-                  <input id="firstName" className="ob-input" required aria-required="true" type="text" defaultValue="Иван" autoComplete="given-name" />
+                  <input id="firstName" className="ob-input" required aria-required="true" type="text" defaultValue={env.liveApi ? undefined : 'Иван'} autoComplete="given-name" />
                 </div>
                 <div className="ob-field">
                   <label htmlFor="middleName" className="ob-label">
@@ -349,6 +380,27 @@ export function Onboarding() {
                       <option>6</option>
                     </select>
                   </div>
+                </div>
+              )}
+
+              {studying && env.liveApi && (
+                <div className="ob-field onb-cert">
+                  <span className="ob-label">
+                    Справка об обучении<span aria-hidden="true" className="ob-required"> *</span>
+                  </span>
+                  <span className="onb-hint">
+                    Без справки из вуза фонд не примет заявку. Паспорт можно готовить и без неё — загрузите справку сейчас или позже в профиле.
+                  </span>
+                  <label className="onb-cert__pick">
+                    <input type="file" accept={STUDY_CERTIFICATE_ACCEPT} onChange={(e) => void onCertificate(e)} disabled={certificateBusy} className="onb-cert__input" />
+                    {certificateBusy ? 'Загружаем…' : certificate ? 'Заменить файл' : 'Загрузить справку (PDF, JPG, PNG до 8 МБ)'}
+                  </label>
+                  {certificate && <span className="onb-cert__done">{`Загружено: ${certificate.file_name}`}</span>}
+                  {certificateError && (
+                    <span role="alert" className="onb-cert__error">
+                      {certificateError}
+                    </span>
+                  )}
                 </div>
               )}
 
