@@ -186,8 +186,8 @@ jobs:
           scp -P "$SSH_PORT" docker-compose.yml docker-compose.prod.yml deploy.env "$SSH_USER@$HOST:$DEPLOY_PATH/"
           # Postgres монтирует эту папку при первом старте (схема auth и роли): без неё база поднимется без них.
           scp -P "$SSH_PORT" -r backend/supabase/local/. "$SSH_USER@$HOST:$DEPLOY_PATH/backend/supabase/local/"
-          # Caddy: SSL и basic auth на /admin-panel.
-          scp -P "$SSH_PORT" deploy/Caddyfile "$SSH_USER@$HOST:$DEPLOY_PATH/deploy/"
+          # Caddy: SSL и basic auth на /admin-panel; backup.sh монтируется в контейнер backup (без файла Docker создал бы вместо него папку).
+          scp -P "$SSH_PORT" deploy/Caddyfile deploy/backup.sh "$SSH_USER@$HOST:$DEPLOY_PATH/deploy/"
           ssh -p "$SSH_PORT" "$SSH_USER@$HOST" "mv '$DEPLOY_PATH/deploy.env' '$DEPLOY_PATH/.env' && chmod 600 '$DEPLOY_PATH/.env'"
 
       - name: Update containers (docker compose waits for healthchecks)

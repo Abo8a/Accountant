@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { PASSPORT_SECTIONS, type PipelineResponse } from '@passport/contracts';
 import { env } from '../../shared/config/env';
 import { callPassportPipeline } from '../../shared/api/pipeline';
+import type { StoredFile } from '../../shared/api/files';
 import { loadFlow, saveFlow } from '../../shared/state/flow';
 import { refreshCabinetState } from '../../shared/state/cabinet';
 import { openGapsCount } from '../../shared/state/cabinetView';
@@ -41,11 +42,17 @@ const GAPS_LEFT = 7;
 const LIVE_STEP_INTERVAL_MS = 12_000;
 
 // Один запрос на бриф, даже если экран смонтирован дважды (StrictMode) или студент обновил страницу во время сборки.
-let inflight: { text: string; promise: Promise<PipelineResponse> } | null = null;
-function sendBrief(text: string): Promise<PipelineResponse> {
-  if (inflight?.text !== text) {
-    const promise = callPassportPipeline({ action: 'init_or_upload', text_input: text });
-    inflight = { text, promise };
+let inflight: { key: string; promise: Promise<PipelineResponse> } | null = null;
+/** Бриф: текст анкеты или файлы, уже сохранённые на сервере (ветка «Есть материалы»). Пайплайн получает только имя, ссылку и хеш. */
+function sendBrief(text: string, files: StoredFile[]): Promise<PipelineResponse> {
+  const key = `${text}|${files.map((f) => f.sha256_hash).join(',')}`;
+  if (inflight?.key !== key) {
+    const promise = callPassportPipeline({
+      action: 'init_or_upload',
+      ...(text ? { text_input: text } : {}),
+      ...(files.length > 0 ? { files: files.map(({ file_name, file_url, sha256_hash }) => ({ file_name, file_url, sha256_hash })) } : {}),
+    });
+    inflight = { key, promise };
     promise.catch(() => undefined).finally(() => {
       if (inflight?.promise === promise) inflight = null;
     });
@@ -86,18 +93,21 @@ export function Generating() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   // Живой режим: ответ сборки. Если брифа в очереди нет (обновили страницу после сборки) — последний ответ.
-  const [result, setResult] = useState<PipelineResponse | undefined>(() => (live && !loadFlow().pendingBrief ? loadFlow().last : undefined));
+  const [result, setResult] = useState<PipelineResponse | undefined>(() => {
+    const flow = loadFlow();
+    return live && !flow.pendingBrief && !flow.pendingFiles?.length ? flow.last : undefined;
+  });
 
   useEffect(() => {
     if (!live) return undefined;
-    const text = loadFlow().pendingBrief;
-    if (!text) {
+    const { pendingBrief: text = '', pendingFiles: files = [] } = loadFlow();
+    if (!text && files.length === 0) {
       if (!loadFlow().last) navigate('/brief', { replace: true });
       return undefined;
     }
     let cancelled = false;
     setError(false);
-    sendBrief(text)
+    sendBrief(text, files)
       .then((res) => {
         if (cancelled) return;
         if (res.status === 'ERROR' || res.status === 'BLOCKED_PROJECT_SWAP') {
@@ -110,11 +120,12 @@ export function Generating() {
           const refusal = res.fatal_stop_factors?.length
             ? res.fatal_stop_factors.map((f) => ({ reason: f.reason, how_to_fix: f.how_to_fix }))
             : [{ reason: res.rejection_reason ?? '', how_to_fix: '' }];
-          saveFlow({ pendingBrief: undefined, briefRefusal: refusal, last: res });
+          // Файлы уже записаны в проект пайплайном: ставить их в очередь повторно не нужно.
+          saveFlow({ pendingBrief: undefined, pendingFiles: undefined, briefFiles: undefined, briefRefusal: refusal, last: res });
           navigate('/brief', { replace: true });
           return;
         }
-        saveFlow({ pendingBrief: undefined, briefDraft: undefined, briefRefusal: undefined, last: res });
+        saveFlow({ pendingBrief: undefined, pendingFiles: undefined, briefFiles: undefined, briefDraft: undefined, briefRefusal: undefined, last: res });
         void refreshCabinetState();
         setResult(res);
       })

@@ -1,0 +1,2 @@
+# Shell-скрипты выполняются в Linux-контейнерах: CRLF в них ломает запуск (/bin/sh^M: not found).
+*.sh text eol=lf
