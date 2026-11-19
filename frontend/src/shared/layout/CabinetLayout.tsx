@@ -17,10 +17,9 @@ const LOADING_SHELL = {
   gapsCount: null,
 };
 
-// Пункты кабинета из user-flows §1 и Passport.dc.html.
+// Пункты кабинета из user-flows §1 и Passport.dc.html. Раздела «Пробелы» нет: пробелы дорабатываются в блоках паспорта.
 export const CABINET_NAV: SideNavItem[] = [
   { to: '/passport', label: 'Паспорт', icon: 'passport' },
-  { to: '/gaps', label: 'Пробелы', icon: 'gaps' },
   { to: '/result', label: 'Итог', icon: 'result' },
   { to: '/files', label: 'Материалы', icon: 'files' },
   { to: '/billing', label: 'Тариф', icon: 'billing' },
@@ -28,7 +27,7 @@ export const CABINET_NAV: SideNavItem[] = [
 ];
 
 // Меню собрано здесь, а не через SideNav из shared/ui: тому не нужен счётчик, а общие компоненты не меняем.
-// Счётчик показываем у «Пробелов» (иконка gaps), как в Passport.dc.html и Gaps.dc.html.
+// Счётчик открытых пробелов показываем у «Паспорта»: пробелы дорабатываются в его блоках (в эталоне счётчик был у «Пробелов»).
 
 export interface CabinetProject {
   name: string;
@@ -52,7 +51,7 @@ export interface CabinetUser {
 
 /** Настройки шелла, которые зависят от экрана. */
 export interface CabinetShellSettings {
-  /** Счётчик у пункта «Пробелы». null — счётчик не показывается. */
+  /** Счётчик открытых пробелов у пункта «Паспорт». null — счётчик не показывается. */
   gapsCount: number | null;
   /** CSS padding области экрана. */
   mainPadding: string;
@@ -66,7 +65,7 @@ export interface CabinetLayoutProps {
   project?: Partial<CabinetProject>;
   plan?: Partial<CabinetPlan>;
   user?: Partial<CabinetUser>;
-  /** Счётчик у «Пробелов» по умолчанию (до переопределения экраном через useCabinetShell). */
+  /** Счётчик пробелов по умолчанию (до переопределения экраном через useCabinetShell). */
   gapsCount?: number | null;
 }
 
@@ -89,11 +88,10 @@ const SHELL_DEFAULTS: CabinetShellSettings = {
   showPlan: true,
 };
 
-// Значения по маршруту из эталонов Gaps.dc.html и Result.dc.html.
+// Значения по маршруту из эталона Result.dc.html.
 // Отступы 36px 48px 64px и зазор 28px вне токенов (значения из inline-стилей эталонов).
-// На /result счётчика нет (в Result.dc.html пункт «Пробелы» без счётчика).
+// На /result счётчика нет (в Result.dc.html он без счётчика).
 const ROUTE_SHELL: Record<string, Partial<CabinetShellSettings>> = {
-  '/gaps': { mainPadding: '36px 48px 64px', mainGap: '28px' },
   '/result': { gapsCount: null, mainPadding: '36px 48px 64px', mainGap: '28px' },
   '/files': { showPlan: false },
   '/billing': { showPlan: false },
@@ -104,7 +102,7 @@ type ShellSetter = (patch: Partial<CabinetShellSettings>) => void;
 const CabinetShellContext = createContext<ShellSetter | null>(null);
 
 /**
- * Экран переопределяет настройки шелла (счётчик «Пробелов», отступы main) на время своей жизни.
+ * Экран переопределяет настройки шелла (счётчик пробелов, отступы main) на время своей жизни.
  * При уходе с экрана переопределения сбрасываются, и действуют значения маршрута и по умолчанию.
  */
 export function useCabinetShell(settings: Partial<CabinetShellSettings>): void {
@@ -163,7 +161,7 @@ export function CabinetLayout({
               <NavLink key={item.to} to={item.to} className="sidenav__link">
                 <NavIcon name={item.icon} />
                 <span className="sidenav__label">{item.label}</span>
-                {item.icon === 'gaps' && shell.gapsCount !== null && (
+                {item.icon === 'passport' && shell.gapsCount !== null && (
                   <span className="cabinet__badge" aria-hidden="true">{shell.gapsCount}</span>
                 )}
               </NavLink>

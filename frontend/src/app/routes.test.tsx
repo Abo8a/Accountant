@@ -12,7 +12,6 @@ const HEADINGS: Record<string, string> = {
   '/onboarding': 'Расскажите о себе',
   '/brief': 'Есть материалы о проекте?',
   '/generating': 'Буха читает материалы',
-  '/gaps': 'Закроем пробелы',
   '/result': 'Итог',
   '/passport': 'Паспорт проекта',
   '/files': 'Материалы проекта',
@@ -38,7 +37,7 @@ describe('маршруты приложения', () => {
     errorSpy.mockRestore();
   });
 
-  it('карта содержит все 20 маршрутов: user-flows §1, поддержка и дизайн-система', () => {
+  it('карта содержит все 19 маршрутов: user-flows §1, поддержка и дизайн-система', () => {
     expect(APP_ROUTES.map((r) => r.path).sort()).toEqual(Object.keys(HEADINGS).sort());
   });
 
@@ -53,6 +52,15 @@ describe('маршруты приложения', () => {
       expect(errorSpy).not.toHaveBeenCalled();
     });
   }
+
+  it('старая ссылка /gaps ведёт в паспорт: пробелы дорабатываются в блоках', () => {
+    render(
+      <MemoryRouter initialEntries={['/gaps']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('heading', { level: 1, name: 'Паспорт проекта' })).toBeInTheDocument();
+  });
 
   it('неизвестный путь перенаправляет на главную', () => {
     render(
@@ -72,7 +80,6 @@ const TITLES: Record<string, string> = {
   '/onboarding': 'Буха — профиль основателя',
   '/brief': 'Буха — стартовый бриф',
   '/generating': 'Буха — сборка паспорта',
-  '/gaps': 'Буха — пробелы и новизна',
   '/result': 'Буха — итог',
   '/passport': 'Буха — паспорт проекта',
   '/files': 'Буха — материалы проекта',

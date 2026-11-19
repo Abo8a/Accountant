@@ -1,14 +1,17 @@
-import { Fragment, useState, type ChangeEvent, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
-import type { PipelineClaimOut, PipelinePassportField } from '@passport/contracts';
+import { Fragment, useEffect, useState, type ChangeEvent, type ReactNode } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import type { BudgetItemInput, PipelineClaimOut, PipelinePassportField, PipelineQuestion, PipelineResponse, TargetField } from '@passport/contracts';
 import { StatusPill } from '../../shared/ui';
 import { callPassportPipeline } from '../../shared/api/pipeline';
 import { STUDY_CERTIFICATE_ACCEPT, uploadStudyCertificate, type CabinetState } from '../../shared/api/cabinet';
 import { downloadPassport } from '../../shared/api/exportSections';
 import type { FounderInput } from '../../shared/api/profile';
 import { refreshCabinetState, useCabinetState } from '../../shared/state/cabinet';
-import { saveFlow } from '../../shared/state/flow';
+import { loadFlow, saveFlow } from '../../shared/state/flow';
 import { ConsultantWidget } from '../consultant/ConsultantWidget';
+import { BudgetTable } from '../budget/BudgetTable';
+import { AuditRemark } from './AuditRemark';
+import { DirectionChallenge, type DirectionChallengeValue } from './DirectionChallenge';
 import {
   ClaimPanel,
   FIELD_CHIP,
@@ -24,6 +27,8 @@ import {
 
 // Паспорт пользователя в живом режиме: данные из состояния кабинета (GET /pipeline/state), оформление — как Passport.dc.html.
 // Утверждения подсвечены по спанам из бэкенда; правка поля уходит в пайплайн (submit_form) и проходит проверку заново.
+// Доработка пробелов — прямо в блоках (раздела «Пробелы» больше нет): пустое поле или поле с замечанием
+// отправляется ответом с проверкой ИИ (submit_answer), направление выбирается в блоке 4, смета — пункт «Смета» под блоками.
 
 /** Названия полей паспорта — как в выгрузке DOCX (backend/pipeline-api/src/pipeline/exportLabels.ts). */
 const FIELD_LABELS: Record<string, string> = {
@@ -132,14 +137,58 @@ function educationLabel(state: CabinetState): string {
   return `${who} · ${state.study_certificate ? 'справка загружена' : 'справка не загружена'}`;
 }
 
+function isQuestion(res: PipelineResponse | undefined): res is PipelineQuestion {
+  return !!res && (res.status === 'NEED_USER_INPUT' || res.status === 'STOP_NOV' || res.status === 'ANSWER_REJECTED');
+}
+
+/** Поле — пробел: обязательное и пустое или с замечанием аудита. Дорабатывается ответом с проверкой ИИ (submit_answer). */
+function isGap(f: PipelinePassportField): boolean {
+  return !OPTIONAL.has(`${f.section_id}/${f.field_key}`) && (!f.value?.trim() || f.review_status === 'needs_review');
+}
+
+/** Какой блок открыть: из ссылки (?block=6 или ?block=budget), иначе — блок текущего вопроса пайплайна, иначе блок 2. */
+function initialSection(param: string | null, flow: PipelineResponse | undefined): Sec {
+  if (param === 'budget') return 'budget';
+  const n = Number(param);
+  if (Number.isInteger(n) && n >= 1 && n <= 10) return n;
+  if (isQuestion(flow) && flow.step === 'BUDGET_REVIEW') return 'budget';
+  if (isQuestion(flow) && flow.target_field) return flow.target_field.section_id;
+  return 2;
+}
+
+type Sec = number | 'budget';
+
 export function LivePassport() {
   const state = useCabinetState();
-  const [sec, setSec] = useState(2);
+  const [params] = useSearchParams();
+  const [flow, setFlow] = useState<PipelineResponse | undefined>(() => loadFlow().last);
+  const [sec, setSec] = useState<Sec>(() => initialSection(params.get('block'), loadFlow().last));
   const [sel, setSel] = useState<string | null>(null);
   const [expert, setExpert] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // Замечания к отклонённым ответам: по ключу поля «секция/поле». Черновик остаётся в редакторе.
+  const [rejected, setRejected] = useState<Record<string, string>>({});
+  // «Не знаю — помогите» открывает ИИ-Консультанта.
+  const [helpSignal, setHelpSignal] = useState(0);
+
+  // Открыли паспорт в новой вкладке: текущего шага пайплайна нет — спрашиваем его (без текста модели не вызываются).
+  useEffect(() => {
+    if (flow) return;
+    let alive = true;
+    callPassportPipeline({ action: 'init_or_upload' })
+      .then((res) => {
+        if (!alive || res.status === 'ERROR') return;
+        saveFlow({ last: res });
+        setFlow(res);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (state === undefined) {
     return (
@@ -164,30 +213,71 @@ export function LivePassport() {
   }
 
   const passport = state.passport;
-  const meta = SECTIONS.find((s) => s.id === sec) ?? SECTIONS[0]!;
-  const fields = passport.filter((f) => f.section_id === sec);
-  const audit = state.block_audits.find((b) => b.section_id === sec);
+  const secId = sec === 'budget' ? null : sec;
+  const meta = SECTIONS.find((s) => s.id === secId) ?? SECTIONS[0]!;
+  const fields = passport.filter((f) => f.section_id === secId);
+  const audit = state.block_audits.find((b) => b.section_id === secId);
   const required = passport.filter((f) => !OPTIONAL.has(`${f.section_id}/${f.field_key}`));
   const allApproved = required.length > 0 && required.every((f) => f.review_status === 'approved') && state.budget_audit?.status === 'approved';
   const selectedClaim = findClaim(passport, sel);
+  const question = isQuestion(flow) ? flow : null;
+  const budgetApproved = state.budget_audit?.status === 'approved';
 
-  async function saveField(f: PipelinePassportField, value: string) {
+  /** Ответ пайплайна после сохранения: запоминаем шаг, обновляем паспорт. false — правка не принята. */
+  async function apply(res: PipelineResponse, key: string | null): Promise<boolean> {
+    if (res.status === 'ERROR' || res.status === 'BLOCKED_PROJECT_SWAP') {
+      setMessage(res.message);
+      return false;
+    }
+    saveFlow({ last: res });
+    setFlow(res);
+    if (res.status === 'ANSWER_REJECTED' && key) {
+      setRejected((p) => ({ ...p, [key]: res.rejection_reason ?? 'Ответ пока не закрывает вопрос.' }));
+      await refreshCabinetState();
+      return false;
+    }
+    await refreshCabinetState();
+    return true;
+  }
+
+  async function run(key: string | null, call: () => Promise<PipelineResponse>) {
     setBusy(true);
     setMessage(null);
     try {
-      const res = await callPassportPipeline({ action: 'submit_form', form: [{ section_id: f.section_id, field_key: f.field_key, value }] });
-      if (res.status === 'ERROR' || res.status === 'BLOCKED_PROJECT_SWAP') {
-        setMessage(res.message);
-        return;
+      if (await apply(await call(), key)) {
+        setEditing(null);
+        if (key) setRejected(({ [key]: _drop, ...rest }) => rest);
       }
-      saveFlow({ last: res });
-      await refreshCabinetState();
-      setEditing(null);
     } catch {
       setMessage('Не удалось сохранить правку. Попробуйте ещё раз.');
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Заполненное поле — правка текста (submit_form). Пробел — ответ с проверкой ИИ (submit_answer), как раньше в «Пробелах». */
+  function saveField(f: PipelinePassportField, value: string) {
+    const key = `${f.section_id}/${f.field_key}`;
+    if (isGap(f)) {
+      const tf: TargetField = { section_id: f.section_id, field_key: f.field_key };
+      const asked = question?.target_field?.section_id === f.section_id && question.target_field.field_key === f.field_key ? question.question : undefined;
+      void run(key, () => callPassportPipeline({ action: 'submit_answer', target_field: tf, ...(asked ? { previous_question: asked } : {}), text_input: value }));
+    } else {
+      void run(key, () => callPassportPipeline({ action: 'submit_form', form: [{ section_id: f.section_id, field_key: f.field_key, value }] }));
+    }
+  }
+
+  function saveDirection(v: DirectionChallengeValue) {
+    void run(null, () =>
+      callPassportPipeline({
+        action: 'submit_form',
+        form: [{ section_id: 4, field_key: 'direction', value: v.direction }, ...(v.challenge ? [{ section_id: 4, field_key: 'tech_challenge', value: v.challenge }] : [])],
+      }),
+    );
+  }
+
+  function saveBudget(items: BudgetItemInput[]) {
+    void run(null, () => callPassportPipeline({ action: 'submit_form', budget_items: items }));
   }
 
   async function onDownload() {
@@ -207,6 +297,11 @@ export function LivePassport() {
     else await refreshCabinetState();
   }
 
+  const pick = (next: Sec) => {
+    setSec(next);
+    setEditing(null);
+  };
+
   const hint = allApproved ? undefined : 'Скачать можно, когда все 10 блоков одобрены';
   const founderRows: [string, string][] = [
     ['ФИО', state.founder.full_name ?? '—'],
@@ -215,6 +310,10 @@ export function LivePassport() {
     ['Регион', state.founder.region ?? '—'],
     ['Контакты', state.founder.contacts ?? '—'],
   ];
+
+  const directionValue = passport.find((f) => f.section_id === 4 && f.field_key === 'direction')?.value?.trim() || undefined;
+  const challengeValue = passport.find((f) => f.section_id === 4 && f.field_key === 'tech_challenge')?.value?.trim() || undefined;
+  const directionAsked = question?.target_field?.section_id === 4 && (question.target_field.field_key === 'direction' || question.target_field.field_key === 'tech_challenge');
 
   return (
     <div className="passport">
@@ -265,10 +364,7 @@ export function LivePassport() {
                 key={s.id}
                 type="button"
                 aria-current={current ? 'true' : 'false'}
-                onClick={() => {
-                  setSec(s.id);
-                  setEditing(null);
-                }}
+                onClick={() => pick(s.id)}
                 className={`passport__nav-item${current ? ' passport__nav-item--current' : ''}`}
               >
                 <span className="passport__nav-num">{s.id}</span>
@@ -277,83 +373,136 @@ export function LivePassport() {
               </button>
             );
           })}
+          {/* «Смета» под блоками — как в Passport.dc.html; в живом режиме смета правится здесь же. */}
+          <button
+            type="button"
+            aria-current={sec === 'budget' ? 'true' : 'false'}
+            onClick={() => pick('budget')}
+            className={`passport__nav-item passport__nav-item--budget${sec === 'budget' ? ' passport__nav-item--current' : ''}`}
+          >
+            <span className="passport__nav-num" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="3" width="16" height="18" rx="2" />
+                <path d="M8 7h8" />
+                <path d="M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01" />
+              </svg>
+            </span>
+            <span className="passport__nav-label">Смета</span>
+            <span className={`passport__nav-dot passport__nav-dot--${budgetApproved ? 'approved' : 'needs'}`} />
+          </button>
         </nav>
 
-        <section className="passport__section">
-          <div className="passport__sec-head">
-            <span className="passport__eyebrow">Блок {meta.id}</span>
-            <h2 className="passport__sec-title">{meta.name}</h2>
-          </div>
-
-          {meta.founder && (
-            <div className="passport__founder">
-              <dl className="passport__dl">
-                {founderRows.map(([term, value]) => (
-                  <Fragment key={term}>
-                    <dt>{term}</dt>
-                    <dd>{value}</dd>
-                  </Fragment>
-                ))}
-              </dl>
-              {!state.study_certificate && (
-                <p className="passport__note">Без справки об обучении фонд не примет заявку. Паспорт можно собрать и выгрузить и без неё.</p>
-              )}
-              <label className="passport__cert-pick">
-                <input type="file" accept={STUDY_CERTIFICATE_ACCEPT} onChange={(e) => void onCertificate(e)} disabled={busy} className="passport__cert-input" />
-                {state.study_certificate ? 'Заменить справку об обучении' : 'Загрузить справку об обучении'}
-              </label>
-              <Link to="/profile" className="passport__founder-link">Изменить в профиле</Link>
+        {sec === 'budget' ? (
+          <section className="passport__section">
+            <div className="passport__sec-head">
+              <h2 className="passport__sec-title">Смета</h2>
             </div>
-          )}
+            {budgetApproved && <p className="passport__note">Смета одобрена аудитом</p>}
+            {!budgetApproved && state.budget_audit?.remark && <AuditRemark remark={state.budget_audit.remark} howToFix={state.budget_audit.how_to_fix} />}
+            <BudgetTable
+              busy={busy}
+              violations={question?.step === 'BUDGET_REVIEW' && question.rejection_reason ? [question.rejection_reason] : []}
+              onSubmit={saveBudget}
+            />
+          </section>
+        ) : (
+          <section className="passport__section">
+            <div className="passport__sec-head">
+              <span className="passport__eyebrow">Блок {meta.id}</span>
+              <h2 className="passport__sec-title">{meta.name}</h2>
+            </div>
 
-          {fields.map((f) => {
-            const key = `${f.section_id}/${f.field_key}`;
-            const fs = fieldStatusOf(f);
-            const chip = f.value?.trim() ? FIELD_CHIP[fs] : undefined;
-            const isEditing = editing === key;
-            const failed = audit?.status === 'needs_review' && audit.failed_fields.includes(f.field_key);
-            return (
-              <article key={key} className="passport__field">
-                <div className="passport__field-head">
-                  <div className="passport__field-title">
-                    <h3 className="passport__field-name">{FIELD_LABELS[f.field_key] ?? f.field_key}</h3>
-                    {chip && <StatusPill tone={chip.tone}>{chip.label}</StatusPill>}
+            {audit?.status === 'needs_review' && audit.remark && <AuditRemark remark={audit.remark} howToFix={audit.how_to_fix} />}
+
+            {meta.founder && (
+              <div className="passport__founder">
+                <dl className="passport__dl">
+                  {founderRows.map(([term, value]) => (
+                    <Fragment key={term}>
+                      <dt>{term}</dt>
+                      <dd>{value}</dd>
+                    </Fragment>
+                  ))}
+                </dl>
+                {!state.study_certificate && (
+                  <p className="passport__note">Без справки об обучении фонд не примет заявку. Паспорт можно собрать и выгрузить и без неё.</p>
+                )}
+                <label className="passport__cert-pick">
+                  <input type="file" accept={STUDY_CERTIFICATE_ACCEPT} onChange={(e) => void onCertificate(e)} disabled={busy} className="passport__cert-input" />
+                  {state.study_certificate ? 'Заменить справку об обучении' : 'Загрузить справку об обучении'}
+                </label>
+                <Link to="/profile" className="passport__founder-link">Изменить в профиле</Link>
+              </div>
+            )}
+
+            {fields.map((f) => {
+              const key = `${f.section_id}/${f.field_key}`;
+              const fs = fieldStatusOf(f);
+              const filled = !!f.value?.trim();
+              const chip = filled ? FIELD_CHIP[fs] : undefined;
+              const isEditing = editing === key;
+              const gap = isGap(f);
+              const isDirection = key === '4/direction';
+              // Выбор направления правит оба кода сразу, у вызова своей кнопки нет.
+              const editable = !CODE_FIELDS.has(key) || isDirection;
+              const asked = question?.target_field?.section_id === f.section_id && question.target_field.field_key === f.field_key ? question : null;
+              return (
+                <article key={key} className="passport__field">
+                  <div className="passport__field-head">
+                    <div className="passport__field-title">
+                      <h3 className="passport__field-name">{FIELD_LABELS[f.field_key] ?? f.field_key}</h3>
+                      {chip && <StatusPill tone={chip.tone}>{chip.label}</StatusPill>}
+                    </div>
+                    {!isEditing && editable && (
+                      <div className="passport__field-actions">
+                        <button type="button" className="passport__btn-edit" disabled={busy} onClick={() => setEditing(key)}>
+                          {filled ? 'Править' : 'Заполнить'}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {!isEditing && !CODE_FIELDS.has(key) && f.value?.trim() && (
-                    <div className="passport__field-actions">
-                      <button type="button" className="passport__btn-edit" disabled={busy} onClick={() => setEditing(key)}>
-                        Править
+
+                  {!isEditing && filled && <p className="passport__text">{renderValue(f, expert, sel, setSel)}</p>}
+                  {!isEditing && !filled && <p className="passport__note">{OPTIONAL.has(key) ? 'Необязательное поле.' : 'Пока не заполнено.'}</p>}
+                  {!isEditing && gap && asked?.question && <p className="passport__note">{asked.question}</p>}
+
+                  {isEditing && isDirection && (
+                    <DirectionChallenge
+                      initialDirection={directionValue ?? (directionAsked ? question?.suggestion?.direction : undefined)}
+                      initialChallenge={challengeValue ?? (directionAsked ? (question?.suggestion?.tech_challenge ?? undefined) : undefined)}
+                      busy={busy}
+                      onHelp={() => setHelpSignal((n) => n + 1)}
+                      onSubmit={saveDirection}
+                    />
+                  )}
+                  {isEditing && isDirection && (
+                    <div className="passport__editor-actions">
+                      <button type="button" className="passport__btn-cancel" disabled={busy} onClick={() => setEditing(null)}>
+                        Отмена
                       </button>
                     </div>
                   )}
-                </div>
 
-                {!isEditing && f.value?.trim() && (
-                  <p className="passport__text">{renderValue(f, expert, sel, setSel)}</p>
-                )}
-                {!isEditing && !f.value?.trim() && (
-                  <p className="passport__note">
-                    {OPTIONAL.has(key) ? 'Необязательное поле.' : 'Пока не заполнено.'}{' '}
-                    {!OPTIONAL.has(key) && <Link to="/gaps">Ответить в «Пробелах»</Link>}
-                  </p>
-                )}
-
-                {isEditing && (
-                  <LiveFieldEditor
-                    inputId={`edit-${f.section_id}-${f.field_key}`}
-                    initialText={f.value ?? ''}
-                    wasApproved={fs === 'approved'}
-                    busy={busy}
-                    onSave={(text) => void saveField(f, text)}
-                    onCancel={() => setEditing(null)}
-                  />
-                )}
-
-                {failed && audit?.remark && !isEditing && <p className="passport__note">{audit.remark}</p>}
-              </article>
-            );
-          })}
-        </section>
+                  {isEditing && !isDirection && (
+                    <LiveFieldEditor
+                      inputId={`edit-${f.section_id}-${f.field_key}`}
+                      initialText={f.value ?? ''}
+                      wasApproved={fs === 'approved'}
+                      busy={busy}
+                      question={gap ? asked?.question : undefined}
+                      criteria={gap ? asked?.criteria : undefined}
+                      example={gap ? asked?.example : undefined}
+                      rejection={rejected[key]}
+                      onHelp={gap ? () => setHelpSignal((n) => n + 1) : undefined}
+                      onSave={(text) => saveField(f, text)}
+                      onCancel={() => setEditing(null)}
+                    />
+                  )}
+                </article>
+              );
+            })}
+          </section>
+        )}
 
         <aside id="claim-panel" aria-label="Утверждение" className="passport__panel">
           {!selectedClaim && (
@@ -375,7 +524,7 @@ export function LivePassport() {
           )}
         </aside>
       </div>
-      <ConsultantWidget activeSectionId={sec} />
+      <ConsultantWidget activeSectionId={secId ?? undefined} openSignal={helpSignal} />
     </div>
   );
 }
@@ -385,18 +534,30 @@ interface LiveFieldEditorProps {
   initialText: string;
   wasApproved: boolean;
   busy: boolean;
+  /** Вопрос пайплайна к этому полю, критерий фонда и пример (были на экране «Пробелы»). */
+  question?: string;
+  criteria?: string;
+  example?: string;
+  /** Почему ИИ не принял ответ; черновик остаётся в поле. */
+  rejection?: string;
+  /** «Не знаю — помогите»: открывает ИИ-Консультанта. */
+  onHelp?: () => void;
   onSave: (text: string) => void;
   onCancel: () => void;
 }
 
-function LiveFieldEditor({ inputId, initialText, wasApproved, busy, onSave, onCancel }: LiveFieldEditorProps) {
+function LiveFieldEditor({ inputId, initialText, wasApproved, busy, question, criteria, example, rejection, onHelp, onSave, onCancel }: LiveFieldEditorProps) {
   const [draft, setDraft] = useState(initialText);
   return (
     <div className="passport__editor">
+      {question && <p className="passport__editor-question">{question}</p>}
+      {criteria && <p className="passport__note">{`Что проверяет фонд: ${criteria}`}</p>}
+      {example && <p className="passport__note">{`Как обычно пишут: ${example}`}</p>}
       <label htmlFor={inputId} className="passport__editor-hint">
         Правка текста поля. После сохранения Буха заново найдёт каждое утверждение в тексте.
       </label>
       <textarea id={inputId} rows={4} value={draft} onChange={(e) => setDraft(e.target.value)} className="passport__textarea" />
+      {rejection && <AuditRemark remark={rejection} />}
       {wasApproved && <span className="passport__editor-warn">Поле согласовано. Правка снимет согласование.</span>}
       <div className="passport__editor-actions">
         <button type="button" className="passport__btn-save" disabled={busy || !draft.trim()} onClick={() => onSave(draft.trim())}>
@@ -405,6 +566,11 @@ function LiveFieldEditor({ inputId, initialText, wasApproved, busy, onSave, onCa
         <button type="button" className="passport__btn-cancel" disabled={busy} onClick={onCancel}>
           Отмена
         </button>
+        {onHelp && (
+          <button type="button" className="passport__btn-cancel" disabled={busy} onClick={onHelp}>
+            Не знаю — помогите
+          </button>
+        )}
       </div>
     </div>
   );

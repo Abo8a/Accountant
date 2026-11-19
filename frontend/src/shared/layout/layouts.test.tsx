@@ -19,27 +19,27 @@ function renderWithLayout(path: string, layoutPath: string, element: ReactElemen
 }
 
 describe('CabinetLayout', () => {
-  it('меню кабинета из шести пунктов с маршрутами дизайна', () => {
+  it('меню кабинета из пяти пунктов: раздела «Пробелы» нет', () => {
     renderWithLayout('/passport', '/passport', <CabinetLayout />);
     const nav = screen.getByRole('navigation', { name: 'Разделы кабинета' });
     const links = nav.querySelectorAll('a');
     expect(Array.from(links).map((a) => a.querySelector('.sidenav__label')?.textContent)).toEqual([
-      'Паспорт', 'Пробелы', 'Итог', 'Материалы', 'Тариф', 'Профиль',
+      'Паспорт', 'Итог', 'Материалы', 'Тариф', 'Профиль',
     ]);
     expect(Array.from(links).map((a) => a.getAttribute('href'))).toEqual([
-      '/passport', '/gaps', '/result', '/files', '/billing', '/profile',
+      '/passport', '/result', '/files', '/billing', '/profile',
     ]);
+    expect(screen.queryByRole('link', { name: 'Пробелы' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Паспорт' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('счётчик «1» у «Пробелов» по умолчанию из дизайна, не входит в имя ссылки', () => {
+  it('счётчик пробелов «1» по умолчанию — у «Паспорта», не входит в имя ссылки', () => {
     renderWithLayout('/passport', '/passport', <CabinetLayout />);
-    const gaps = screen.getByRole('link', { name: 'Пробелы' });
-    expect(gaps).toHaveTextContent('1');
+    expect(screen.getByRole('link', { name: 'Паспорт' })).toHaveTextContent('1');
     expect(screen.getByRole('link', { name: 'Итог' })).not.toHaveTextContent(/\d/);
   });
 
-  it('счётчик из props по умолчанию; null скрывает, 0 показывается как в Gaps.dc.html', () => {
+  it('счётчик из props по умолчанию; null скрывает, 0 показывается', () => {
     const { unmount } = render(
       <MemoryRouter initialEntries={['/passport']}>
         <Routes>
@@ -49,8 +49,19 @@ describe('CabinetLayout', () => {
         </Routes>
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: 'Пробелы' })).toHaveTextContent('3');
+    expect(screen.getByRole('link', { name: 'Паспорт' })).toHaveTextContent('3');
     unmount();
+    const second = render(
+      <MemoryRouter initialEntries={['/passport']}>
+        <Routes>
+          <Route element={<CabinetLayout gapsCount={0} />}>
+            <Route path="/passport" element={<div>экран</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: 'Паспорт' })).toHaveTextContent('0');
+    second.unmount();
     render(
       <MemoryRouter initialEntries={['/passport']}>
         <Routes>
@@ -60,7 +71,7 @@ describe('CabinetLayout', () => {
         </Routes>
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: 'Пробелы' })).not.toHaveTextContent(/\d/);
+    expect(screen.getByRole('link', { name: 'Паспорт' })).not.toHaveTextContent(/\d/);
   });
 
   it('на /result счётчика нет и отступы из Result.dc.html', () => {
@@ -73,32 +84,32 @@ describe('CabinetLayout', () => {
         </Routes>
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: 'Пробелы' })).not.toHaveTextContent(/\d/);
+    expect(screen.getByRole('link', { name: 'Паспорт' })).not.toHaveTextContent(/\d/);
     const main = document.querySelector('main') as HTMLElement;
     expect(main.style.getPropertyValue('--cabinet-main-padding')).toBe('36px 48px 64px');
     expect(main.style.getPropertyValue('--cabinet-main-gap')).toBe('28px');
   });
 
   it('экран переопределяет счётчик через useCabinetShell; при уходе значения сбрасываются', async () => {
-    function GapsScreen() {
+    function CountingScreen() {
       useCabinetShell({ gapsCount: 4 });
-      return <div>пробелы экрана</div>;
+      return <div>экран со счётчиком</div>;
     }
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={['/gaps']}>
-        <Link to="/passport">уйти</Link>
+      <MemoryRouter initialEntries={['/files']}>
+        <Link to="/billing">уйти</Link>
         <Routes>
           <Route element={<CabinetLayout />}>
-            <Route path="/gaps" element={<GapsScreen />} />
-            <Route path="/passport" element={<div>паспорт</div>} />
+            <Route path="/files" element={<CountingScreen />} />
+            <Route path="/billing" element={<div>тариф</div>} />
           </Route>
         </Routes>
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: 'Пробелы' })).toHaveTextContent('4');
+    expect(screen.getByRole('link', { name: 'Паспорт' })).toHaveTextContent('4');
     await user.click(screen.getByRole('link', { name: 'уйти' }));
-    expect(screen.getByRole('link', { name: 'Пробелы' })).toHaveTextContent('1');
+    expect(screen.getByRole('link', { name: 'Паспорт' })).toHaveTextContent('1');
   });
 
   it('данные проекта, тарифа и пользователя берутся из props, по умолчанию — из дизайна', () => {
@@ -123,14 +134,14 @@ describe('CabinetLayout', () => {
         <Routes>
           <Route element={<CabinetLayout />}>
             <Route path="/passport" element={<div>экран паспорта</div>} />
-            <Route path="/gaps" element={<div>экран пробелов</div>} />
+            <Route path="/result" element={<div>экран итога</div>} />
           </Route>
         </Routes>
       </MemoryRouter>,
     );
     expect(screen.getByText('экран паспорта')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('link', { name: 'Пробелы' }));
-    expect(screen.getByText('экран пробелов')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('link', { name: 'Итог' }));
+    expect(screen.getByText('экран итога')).toBeInTheDocument();
   });
 });
 
