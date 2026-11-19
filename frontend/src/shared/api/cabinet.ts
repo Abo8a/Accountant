@@ -56,6 +56,16 @@ export interface CabinetState {
   block_audits: BlockAuditOut[];
   budget_audit: BudgetAuditOut | null;
   result: CabinetResult | null;
+  /** Правки, сохранённые без проверки («секция/поле» и «budget»): их проверяет «Проверить». Нет у старого бэкенда. */
+  pending_review?: string[];
+  /** Подсказки к полям из базы знаний: вопрос, критерий фонда, пример заполнения. Нет у старого бэкенда. */
+  field_hints?: Record<string, FieldHint>;
+}
+
+export interface FieldHint {
+  question: string;
+  criteria: string;
+  example: string;
 }
 
 const stateUrl = () => `${env.pipelineUrl}/state`;

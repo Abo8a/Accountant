@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { BudgetItemInput, ClaimOrigin, PipelineClaimOut, PipelinePassportField, PipelineQuestion, PipelineResponse, TargetField } from '@passport/contracts';
+import type { BudgetItemInput, ClaimOrigin, PipelineClaimOut, PipelinePassportField, PipelineQuestion, PipelineRequest, PipelineResponse, TargetField } from '@passport/contracts';
 import { StatusPill } from '../../shared/ui';
 import { callPassportPipeline } from '../../shared/api/pipeline';
 import { STUDY_CERTIFICATE_ACCEPT, uploadStudyCertificate, type CabinetState } from '../../shared/api/cabinet';
@@ -26,9 +26,10 @@ import {
 } from './Passport';
 
 // Паспорт пользователя в живом режиме: данные из состояния кабинета (GET /pipeline/state), оформление — как Passport.dc.html.
-// Утверждения подсвечены по спанам из бэкенда; правка поля уходит в пайплайн (submit_form) и проходит проверку заново.
-// Доработка пробелов — прямо в блоках (раздела «Пробелы» больше нет): пустое поле или поле с замечанием
-// отправляется ответом с проверкой ИИ (submit_answer), направление выбирается в блоке 4, смета — пункт «Смета» под блоками.
+// Утверждения подсвечены по спанам из бэкенда. «Сохранить» в любом блоке (поле, направление, смета) пишет правку сразу,
+// без моделей (save_draft). «Проверить» в правом верхнем углу отдаёт модели все сохранённые правки разом (review_edits):
+// ИИ упаковывает текст, аудит перепроверяет изменённые блоки, замечания обновляются по всему паспорту.
+// Доработка пробелов — прямо в блоках: в редакторе поля критерий фонда и пример заполнения («Как обычно пишут»).
 
 /** Названия полей паспорта — как в выгрузке DOCX (backend/pipeline-api/src/pipeline/exportLabels.ts). */
 const FIELD_LABELS: Record<string, string> = {
@@ -70,6 +71,8 @@ const LIVE_LEGEND: { kind: 'user' | 'ai' | 'to-fill'; label: string }[] = [
 const ORIGIN_LABEL: Record<ClaimOrigin, string> = { user: 'Слова пользователя', ai: 'Дописано ИИ' };
 
 const OPTIONAL = new Set(['4/tech_challenge']);
+/** Правка сохранена, но ещё не прошла «Проверить». */
+const PENDING_CHIP = { label: 'Не проверено', tone: 'info' } as const;
 const PDF_HINT = 'Выгрузка в PDF пока не готова — скачайте DOCX';
 const CODE_FIELDS = new Set(['4/direction', '4/tech_challenge']);
 
@@ -168,6 +171,17 @@ function initialSection(param: string | null, flow: PipelineResponse | undefined
 
 type Sec = number | 'budget';
 
+/** Строка под кнопкой после «Проверить»: где остались замечания аудита. */
+export function reviewSummary(s: CabinetState | null): string {
+  if (!s) return 'Проверка завершена.';
+  const blocks = s.block_audits.filter((b) => b.status === 'needs_review').map((b) => b.section_id).sort((a, b) => a - b);
+  const parts = [
+    ...(blocks.length > 0 ? [`${blocks.length === 1 ? 'блок' : 'блоки'} ${blocks.join(', ')}`] : []),
+    ...(s.budget_audit && s.budget_audit.status !== 'approved' ? ['смета'] : []),
+  ];
+  return parts.length === 0 ? 'Проверка завершена: замечаний аудита нет.' : `Проверка завершена. Замечания аудита: ${parts.join(', ')}.`;
+}
+
 export function LivePassport() {
   const state = useCabinetState();
   const [params] = useSearchParams();
@@ -177,9 +191,9 @@ export function LivePassport() {
   const [expert, setExpert] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  // Замечания к отклонённым ответам: по ключу поля «секция/поле». Черновик остаётся в редакторе.
-  const [rejected, setRejected] = useState<Record<string, string>>({});
+  const [reviewNote, setReviewNote] = useState<string | null>(null);
   // «Не знаю — помогите» открывает ИИ-Консультанта.
   const [helpSignal, setHelpSignal] = useState(0);
 
@@ -234,32 +248,22 @@ export function LivePassport() {
   const selectedClaim = findClaim(passport, sel);
   const question = isQuestion(flow) ? flow : null;
   const budgetApproved = state.budget_audit?.status === 'approved';
+  const pending = new Set(state.pending_review ?? []);
+  const hints = state.field_hints ?? {};
 
-  /** Ответ пайплайна после сохранения: запоминаем шаг, обновляем паспорт. false — правка не принята. */
-  async function apply(res: PipelineResponse, key: string | null): Promise<boolean> {
-    if (res.status === 'ERROR' || res.status === 'BLOCKED_PROJECT_SWAP') {
-      setMessage(res.message);
-      return false;
-    }
-    saveFlow({ last: res });
-    setFlow(res);
-    if (res.status === 'ANSWER_REJECTED' && key) {
-      setRejected((p) => ({ ...p, [key]: res.rejection_reason ?? 'Ответ пока не закрывает вопрос.' }));
-      await refreshCabinetState();
-      return false;
-    }
-    await refreshCabinetState();
-    return true;
-  }
-
-  async function run(key: string | null, call: () => Promise<PipelineResponse>) {
+  /** «Сохранить»: правка пишется сразу, без моделей (save_draft), и ждёт «Проверить». */
+  async function save(body: Pick<PipelineRequest, 'form' | 'field_form' | 'budget_items'>) {
     setBusy(true);
     setMessage(null);
+    setReviewNote(null);
     try {
-      if (await apply(await call(), key)) {
-        setEditing(null);
-        if (key) setRejected(({ [key]: _drop, ...rest }) => rest);
+      const res = await callPassportPipeline({ action: 'save_draft', ...body });
+      if (res.status === 'ERROR' || res.status === 'BLOCKED_PROJECT_SWAP') {
+        setMessage(res.message);
+        return;
       }
+      setEditing(null);
+      await refreshCabinetState();
     } catch {
       setMessage('Не удалось сохранить правку. Попробуйте ещё раз.');
     } finally {
@@ -267,31 +271,44 @@ export function LivePassport() {
     }
   }
 
-  /** Заполненное поле — правка текста (submit_form). Пробел — ответ с проверкой ИИ (submit_answer), как раньше в «Пробелах». */
-  // Анкета (таблица, «да/нет») сохраняется вместе с текстом: ИИ переписывает текст, а форму потом открываем как была.
-  function saveField(f: PipelinePassportField, value: string, form?: Record<string, unknown>) {
-    const key = `${f.section_id}/${f.field_key}`;
-    const tf: TargetField = { section_id: f.section_id, field_key: f.field_key };
-    const fieldForm = form ? { field_form: { ...tf, data: form } } : {};
-    if (isGap(f)) {
-      const asked = question?.target_field?.section_id === f.section_id && question.target_field.field_key === f.field_key ? question.question : undefined;
-      void run(key, () => callPassportPipeline({ action: 'submit_answer', target_field: tf, ...(asked ? { previous_question: asked } : {}), text_input: value, ...fieldForm }));
-    } else {
-      void run(key, () => callPassportPipeline({ action: 'submit_form', form: [{ ...tf, value }], ...fieldForm }));
+  /** «Проверить»: модель по всем сохранённым правкам разом, затем аудит изменённых блоков (review_edits). */
+  async function review() {
+    setBusy(true);
+    setReviewing(true);
+    setMessage(null);
+    setReviewNote(null);
+    try {
+      const res = await callPassportPipeline({ action: 'review_edits' });
+      if (res.status === 'ERROR' || res.status === 'BLOCKED_PROJECT_SWAP') {
+        setMessage(res.message);
+        return;
+      }
+      saveFlow({ last: res });
+      setFlow(res);
+      setEditing(null);
+      setReviewNote(reviewSummary(await refreshCabinetState()));
+    } catch {
+      setMessage('Не удалось проверить правки. Попробуйте ещё раз.');
+    } finally {
+      setBusy(false);
+      setReviewing(false);
     }
   }
 
+  // Анкета (таблица, «да/нет») сохраняется вместе с текстом: ИИ на проверке переписывает текст, а форму потом открываем как была.
+  function saveField(f: PipelinePassportField, value: string, form?: Record<string, unknown>) {
+    const tf: TargetField = { section_id: f.section_id, field_key: f.field_key };
+    void save({ form: [{ ...tf, value }], ...(form ? { field_form: { ...tf, data: form } } : {}) });
+  }
+
   function saveDirection(v: DirectionChallengeValue) {
-    void run(null, () =>
-      callPassportPipeline({
-        action: 'submit_form',
-        form: [{ section_id: 4, field_key: 'direction', value: v.direction }, ...(v.challenge ? [{ section_id: 4, field_key: 'tech_challenge', value: v.challenge }] : [])],
-      }),
-    );
+    void save({
+      form: [{ section_id: 4, field_key: 'direction', value: v.direction }, ...(v.challenge ? [{ section_id: 4, field_key: 'tech_challenge', value: v.challenge }] : [])],
+    });
   }
 
   function saveBudget(items: BudgetItemInput[]) {
-    void run(null, () => callPassportPipeline({ action: 'submit_form', budget_items: items }));
+    void save({ budget_items: items });
   }
 
   async function onDownload() {
@@ -348,8 +365,15 @@ export function LivePassport() {
           <button type="button" className="passport__btn" disabled title={PDF_HINT}>
             PDF
           </button>
-          <Link to="/result" className="passport__btn-brand">Итог проверки</Link>
+          <button type="button" className="passport__btn-brand" disabled={busy} onClick={() => void review()}>
+            {reviewing ? 'Проверяем…' : 'Проверить'}
+          </button>
           {message && <span role="alert" className="passport__download-error">{message}</span>}
+          {reviewNote && (
+            <p role="status" className="passport__review-note">
+              {reviewNote} <Link to="/result">Итог проверки</Link>
+            </p>
+          )}
         </div>
       </div>
 
@@ -403,7 +427,7 @@ export function LivePassport() {
               </svg>
             </span>
             <span className="passport__nav-label">Смета</span>
-            <span className={`passport__nav-dot passport__nav-dot--${budgetApproved ? 'approved' : 'needs'}`} />
+            <span className={`passport__nav-dot passport__nav-dot--${budgetApproved && !pending.has('budget') ? 'approved' : 'needs'}`} />
           </button>
         </nav>
 
@@ -411,8 +435,9 @@ export function LivePassport() {
           <section className="passport__section">
             <div className="passport__sec-head">
               <h2 className="passport__sec-title">Смета</h2>
+              {pending.has('budget') && <StatusPill tone={PENDING_CHIP.tone}>{PENDING_CHIP.label}</StatusPill>}
             </div>
-            {budgetApproved && <p className="passport__note">Смета одобрена аудитом</p>}
+            {budgetApproved && !pending.has('budget') && <p className="passport__note">Смета одобрена аудитом</p>}
             {!budgetApproved && state.budget_audit?.remark && <AuditRemark remark={state.budget_audit.remark} howToFix={state.budget_audit.how_to_fix} />}
             <BudgetTable
               busy={busy}
@@ -454,10 +479,11 @@ export function LivePassport() {
               const key = `${f.section_id}/${f.field_key}`;
               const fs = fieldStatusOf(f);
               const filled = !!f.value?.trim();
-              const chip = filled ? FIELD_CHIP[fs] : undefined;
+              const isDirection = key === '4/direction';
+              const chip = pending.has(key) ? PENDING_CHIP : filled ? FIELD_CHIP[fs] : undefined;
               const isEditing = editing === key;
               const gap = isGap(f);
-              const isDirection = key === '4/direction';
+              const hint = hints[key];
               // Выбор направления правит оба кода сразу, у вызова своей кнопки нет.
               const editable = !CODE_FIELDS.has(key) || isDirection;
               const asked = question?.target_field?.section_id === f.section_id && question.target_field.field_key === f.field_key ? question : null;
@@ -509,9 +535,8 @@ export function LivePassport() {
                       wasApproved={fs === 'approved'}
                       busy={busy}
                       question={gap ? asked?.question : undefined}
-                      criteria={gap ? asked?.criteria : undefined}
-                      example={gap ? asked?.example : undefined}
-                      rejection={rejected[key]}
+                      criteria={(gap ? asked?.criteria : undefined) || hint?.criteria || undefined}
+                      example={(gap ? asked?.example : undefined) || hint?.example || undefined}
                       onHelp={gap ? () => setHelpSignal((n) => n + 1) : undefined}
                       spec={FIELD_FORMS[key]}
                       formData={f.form_data}
