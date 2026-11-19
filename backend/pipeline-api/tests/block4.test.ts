@@ -160,7 +160,7 @@ describe('4.2 выгрузка паспорта в DOCX', () => {
     expect(res.not_approved).toEqual([]);
   });
 
-  it('аудит не согласовал блок: паспорт не завершён, пользователь видит причину, выгрузка закрыта', async () => {
+  it('аудит не согласовал блок: паспорт не завершён, пользователь видит причину, но выгрузка доступна', async () => {
     const userId = await createUser(db.sql);
     const { deps, res } = await completeProject(userId, {
       audit: (_input: any) => ({
@@ -178,7 +178,25 @@ describe('4.2 выгрузка паспорта в DOCX', () => {
     expect(res).toMatchObject({ status: 'NEED_USER_INPUT', target_field: { section_id: 3 }, rejection_reason: 'Проблема описана без измеримых последствий.' });
 
     const sections = await sectionsFromDb(userId);
-    await expect(handleExport(deps, { user_id: userId, sections }, (await db.store.loadContext(userId))!)).rejects.toMatchObject({ code: 'NOT_APPROVED' });
+    const res2 = await handleExport(deps, { user_id: userId, sections }, (await db.store.loadContext(userId))!);
+    expect(res2.status).toBe('EXPORT_READY');
+  });
+
+  it('выгрузка на любом этапе: незаполненное поле остаётся в документе с заголовком и без текста', async () => {
+    const userId = await createUser(db.sql);
+    const { deps } = await completeProject(userId);
+    await db.sql.query(
+      `UPDATE project_passport_records r SET value = '', review_status = 'needs_review' FROM app_projects p
+        WHERE p.id = r.project_id AND p.user_id = $1::uuid AND r.field_key = 'problem_description'`,
+      [userId],
+    );
+    await db.sql.query(`DELETE FROM project_budget_items b USING app_projects p WHERE p.id = b.project_id AND p.user_id = $1::uuid`, [userId]);
+    const sections = await sectionsFromDb(userId);
+    const res = await handleExport(deps, { user_id: userId, sections }, (await db.store.loadContext(userId))!);
+    expect(res.status).toBe('EXPORT_READY');
+    const file = await db.sql.query('SELECT content FROM passport_exports WHERE id = $1::uuid', [res.export_id]);
+    const xml = new PizZip(Buffer.from(file.rows[0].content)).file('word/document.xml')!.asText();
+    expect(xml).toContain('Описание проблемы');
   });
 
   it('всё одобрено: выгрузка создаёт DOCX из 10 секций, в нём ФИО, статьи сметы и чек-лист', async () => {

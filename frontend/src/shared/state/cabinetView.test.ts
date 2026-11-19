@@ -23,6 +23,7 @@ const claim = (claim_type: 'fact' | 'plan' | 'hypothesis' | 'client_statement', 
   span_end: 10,
   order_index: 1,
   verification_status: 'unverified' as const,
+  origin: 'user' as const,
 });
 
 const STATE: CabinetState = {

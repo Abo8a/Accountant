@@ -1,6 +1,7 @@
 // Задача 4.2: выгрузка паспорта в DOCX по нажатию «Скачать».
-// Фронтенд передаёт 10 секций. Сервер проверяет, что одобрено всё, и что переданный текст совпадает
-// с сохранённым и одобренным (иначе экран устарел). Документ строится из проверенных данных.
+// Фронтенд передаёт 10 секций. Скачать можно на любом этапе: незаполненные поля остаются в документе пустыми
+// (заголовок поля есть, текста нет). Сервер сверяет переданный текст с сохранённым (иначе экран устарел),
+// документ строится из проверенных данных.
 import { createHash } from 'node:crypto';
 import { PASSPORT_SECTIONS } from '@passport/contracts';
 import { formatRub } from '@passport/passport-core';
@@ -70,11 +71,6 @@ export async function handleExport(deps: PipelineDeps, req: ExportRequestBody, c
 
   const records = await store.getRecords(project.id);
   const budget = await store.getBudgetItems(project.id);
-  const founderFilled = Boolean(ctx.founderData.full_name?.trim());
-  const missing = notApproved(records, budget, founderFilled);
-  if (missing.length > 0) {
-    throw new PipelineFailure('NOT_APPROVED', `Выгрузка доступна, когда всё одобрено. Не одобрено: ${missing.join('; ')}`);
-  }
 
   verifySections(req.sections, records, ctx.founderData);
 
@@ -87,7 +83,7 @@ export async function handleExport(deps: PipelineDeps, req: ExportRequestBody, c
 }
 
 /**
- * Переданные секции должны совпадать с одобренными сохранёнными значениями.
+ * Переданные секции должны совпадать с сохранёнными значениями.
  * Расхождение значит, что экран устарел или данные подменены: выгрузку не делаем.
  */
 export function verifySections(sections: readonly ExportSectionInput[], records: readonly RecordRow[], founder: Record<string, any>): void {
@@ -121,7 +117,8 @@ export function verifySections(sections: readonly ExportSectionInput[], records:
   }
 }
 
-/** Данные для построителя DOCX: порядок и подписи — из реестра секций, значения — из переданного и проверенного. */
+/** Данные для построителя DOCX: порядок и подписи — из реестра секций, значения — из переданного и проверенного.
+ *  Пустые поля не выбрасываются: в документе остаётся заголовок поля и пустое место под ответ. */
 export async function buildExportData(
   deps: PipelineDeps,
   projectId: string,
@@ -136,15 +133,13 @@ export async function buildExportData(
       number: FOUNDER_SECTION,
       title: FOUNDER_TITLE,
       fields: Object.entries(FOUNDER_LABELS)
-        .map(([key, label]) => ({ label, value: valueOfSection(FOUNDER_SECTION, key) }))
-        .filter((f) => f.value.length > 0),
+        .map(([key, label]) => ({ label, value: valueOfSection(FOUNDER_SECTION, key) })),
     },
     ...PASSPORT_SECTIONS.map((s) => ({
       number: s.id,
       title: s.title,
       fields: s.fields
-        .map((f) => ({ label: FIELD_TITLES[f] ?? f, value: valueOfSection(s.id, f) }))
-        .filter((f) => f.value.length > 0),
+        .map((f) => ({ label: FIELD_TITLES[f] ?? f, value: valueOfSection(s.id, f) })),
     })),
   ];
 

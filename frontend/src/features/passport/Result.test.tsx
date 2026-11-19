@@ -75,10 +75,10 @@ describe('Result', () => {
     expect(screen.queryByText('Со слов команды')).not.toBeInTheDocument();
   });
 
-  it('пока список не закрыт, скачивание недоступно и есть пояснение', () => {
+  it('пока список не закрыт, DOCX всё равно скачивается, пояснение про пустые поля', () => {
     renderResult();
-    expect(screen.getByText('Скачать можно, когда будут закрыты все пункты списка «Что сделать перед подачей».')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Скачать DOCX' })).toBeDisabled();
+    expect(screen.getByText('Скачать можно уже сейчас: незаполненные поля в файле останутся пустыми. Перед подачей закройте пункты списка «Что сделать перед подачей».')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Скачать DOCX' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Скачать PDF' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Согласовать паспорт' })).not.toBeInTheDocument();
   });

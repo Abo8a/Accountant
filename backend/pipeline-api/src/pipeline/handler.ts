@@ -138,13 +138,27 @@ async function run(deps: PipelineDeps, req: PipelineRequest, meter: CreditMeter)
   if (gate) return gate;
 
   if (req.action === 'submit_form') {
-    return handleSubmitForm(deps, req, ctx);
+    return saveFieldForm(deps, req, ctx, await handleSubmitForm(deps, req, ctx));
   }
   // Ветка по наличию полей паспорта: якорь может появиться позже (см. nextStep), а ответы на пробелы должны идти в «есть».
   if (ctx.project?.anchorReady || ctx.project?.hasRecords) {
-    return handleExistingProject(deps, req, ctx);
+    return saveFieldForm(deps, req, ctx, await handleExistingProject(deps, req, ctx));
   }
   return handleNewProject(deps, req, ctx);
+}
+
+/**
+ * Форма интерактивной анкеты (field_form) — рядом с текстом поля. Пишется после текста (смена текста её сбрасывает)
+ * и только когда поле действительно сохранено этим запросом: ответ на это поле принят или поле было в форме submit_form.
+ */
+async function saveFieldForm(deps: PipelineDeps, req: PipelineRequest, ctx: UserContext, res: PipelineResponse): Promise<PipelineResponse> {
+  const form = req.field_form;
+  if (!form || !ctx.project) return res;
+  if (res.status === 'ERROR' || res.status === 'BLOCKED_PROJECT_SWAP' || res.status === 'ANSWER_REJECTED') return res;
+  const same = (t: { section_id: number; field_key: string } | undefined) => t?.section_id === form.section_id && t.field_key === form.field_key;
+  const saved = req.action === 'submit_answer' ? same(req.target_field) : req.action === 'submit_form' && (req.form ?? []).some(same);
+  if (saved) await deps.store.setFieldForm(ctx.project.id, form.section_id, form.field_key, form.data);
+  return res;
 }
 
 /** Ветка «Новый» (G1): якорь ещё не создан (холодный старт, Баг №1). */

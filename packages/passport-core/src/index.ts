@@ -1,5 +1,6 @@
 export * from './spans';
 export * from './audit';
+export * from './origin';
 export * from './rules';
 export * from './eligibility';
 export * from './budget';

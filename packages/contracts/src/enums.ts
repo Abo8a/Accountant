@@ -3,6 +3,9 @@
 
 export type ClaimType = 'fact' | 'plan' | 'hypothesis' | 'client_statement';
 
+/** Чьи слова в утверждении: 'user' — из текста студента или его документов, 'ai' — дописано моделью (миграция 0014). */
+export type ClaimOrigin = 'user' | 'ai';
+
 export type ClaimVerificationStatus =
   | 'unverified'
   | 'confirmed_by_source'
