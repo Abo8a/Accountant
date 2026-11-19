@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import type { BlockAuditOut, BudgetAuditOut, PipelinePassportField } from '@passport/contracts';
 import { STUDY_CERTIFICATE_WARNING } from '@passport/passport-core';
 import { PipelineFailure } from '../errors';
-import type { StudyCertificateMeta, UserContext } from '../db/store';
+import type { ProjectFileRow, StudyCertificateMeta, UserContext } from '../db/store';
 import type { PipelineDeps } from './deps';
 import { loadAuditReport } from './audit';
 import { buildPassportFields } from './passport';
@@ -17,6 +17,8 @@ export interface CabinetState {
   files_limit: number;
   founder: Record<string, unknown>;
   study_certificate: StudyCertificateMeta | null;
+  /** Материалы проекта (загруженные файлы) для экрана «Материалы». */
+  files: ProjectFileRow[];
   project_status: string | null;
   passport: PipelinePassportField[];
   block_audits: BlockAuditOut[];
@@ -47,6 +49,7 @@ export async function loadCabinetState(deps: PipelineDeps, ctx: UserContext): Pr
     files_limit: ctx.fileUploadsLimit,
     founder: ctx.founderData,
     study_certificate: ctx.studyCertificate,
+    files: ctx.project ? await deps.store.listProjectFiles(ctx.project.id) : [],
     project_status: ctx.project?.status ?? null,
     passport: ctx.project?.hasRecords ? buildPassportFields(records) : [],
     block_audits: report?.block_audits ?? [],

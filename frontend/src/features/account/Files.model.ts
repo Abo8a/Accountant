@@ -23,6 +23,8 @@ export interface ProjectFile {
   /** ok — разобран; ocr — скан, распознан; parsing — разбирается. */
   st: 'ok' | 'ocr' | 'parsing';
   sha256?: string;
+  /** id источника на сервере (живой режим): по нему файл скачивают и удаляют. */
+  remoteId?: string;
 }
 
 /** Лимит объёма («из 200 МБ» в Files.dc.html). */
@@ -43,7 +45,9 @@ export type UploadStatus =
   | 'duplicate'
   | 'FILE_QUOTA_EXCEEDED'
   | 'PLAN_UPGRADE_REQUIRED'
-  | 'BLOCKED_PROJECT_SWAP';
+  | 'BLOCKED_PROJECT_SWAP'
+  /** Сервер отказал по другой причине (формат, размер, сеть): текст ответа в message. */
+  | 'rejected';
 
 export interface UploadRequest {
   name: string;
@@ -52,10 +56,32 @@ export interface UploadRequest {
   existing: ProjectFile[];
   /** Лимит файлов тарифа проекта. */
   fileLimit: number;
+  /** Сам файл: нужен живому API, который отправляет его на сервер. */
+  file?: File;
+}
+
+/** Чем закончился разбор файла (живой режим): продолжается после того, как файл принят и появилась строка «Разбираем…». */
+export type UploadCompletion =
+  | { outcome: 'done'; remoteId: string; claims: number; pages?: string }
+  | { outcome: 'BLOCKED_PROJECT_SWAP' }
+  | { outcome: 'error'; message: string };
+
+export interface UploadResponse {
+  status: UploadStatus;
+  /** Текст отказа для status = 'rejected'. */
+  message?: string;
+  /** Только для accepted в живом режиме: разбор идёт в фоне, результат придёт сюда. */
+  completion?: Promise<UploadCompletion>;
 }
 
 export interface FilesApi {
-  upload(request: UploadRequest): Promise<{ status: UploadStatus }>;
+  upload(request: UploadRequest): Promise<UploadResponse>;
+  /** Живой режим: файлы настоящие, поэтому показываем только то, что есть на самом деле (без примера страницы). */
+  live?: boolean;
+  /** Удаляет файл на сервере; false — не удалось. Без метода файл удаляется только на экране. */
+  remove?(file: ProjectFile): Promise<boolean>;
+  /** Ссылка на скачивание или null, если файл ещё разбирается. */
+  downloadUrl?(file: ProjectFile): string | null;
 }
 
 /**
@@ -84,6 +110,15 @@ export function claimsWord(n: number): string {
   if (m10 === 1 && m100 !== 11) return `${n} утверждение`;
   if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return `${n} утверждения`;
   return `${n} утверждений`;
+}
+
+/** «1 страница», «2 страницы», «15 страниц», как в эталоне («15 страниц»). */
+export function pagesWord(n: number): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return `${n} страница`;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return `${n} страницы`;
+  return `${n} страниц`;
 }
 
 /** «4,2 МБ» — запятая как в эталоне. */

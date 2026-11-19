@@ -11,6 +11,8 @@ import { PipelineFailure } from './errors';
 import { handleAuthRequest, sessionUserFor, type AuthHttpOptions } from './auth/http';
 import type { PipelineError } from '@passport/contracts';
 import { loadCabinetState, saveStudyCertificate, STUDY_CERTIFICATE_MAX_BYTES } from './pipeline/state';
+import { FILES_PATH, FILES_PREFIX, handleFilesRequest } from './files/http';
+import { verifyOwnUploads } from './files/storage';
 
 const MAX_BODY_BYTES = 1_000_000;
 const EXPORT_PATH = '/export';
@@ -74,6 +76,8 @@ export interface PipelineServerOptions {
   chat?: ChatOptions;
   /** Вход по коду из письма (/auth/*). Без него маршруты входа не подключены. */
   auth?: AuthHttpOptions;
+  /** Папка загрузок материалов проекта (общий том с парсером). Без неё маршруты /pipeline/files не подключены. */
+  uploadDir?: string;
 }
 
 export function createPipelineServer(deps: PipelineDeps, opts: PipelineServerOptions = {}): Server {
@@ -191,6 +195,13 @@ export function createPipelineServer(deps: PipelineDeps, opts: PipelineServerOpt
         return res.end(file.content);
       }
 
+      // Материалы проекта: загрузка, скачивание и удаление файлов (общий том).
+      if (pathname === FILES_PATH || pathname.startsWith(FILES_PREFIX)) {
+        if (!opts.uploadDir) return send(res, 404, { error: 'not found' });
+        await handleFilesRequest(req, res, pathname, deps, { uploadDir: opts.uploadDir, sharedSecret: opts.sharedSecret, auth: opts.auth });
+        return;
+      }
+
       // Состояние кабинета (GET /pipeline/state) и справка об обучении (POST /pipeline/study-certificate, тело — сам файл).
       if ((req.method === 'GET' && pathname === STATE_PATH) || (req.method === 'POST' && pathname === CERTIFICATE_PATH)) {
         if (opts.sharedSecret && req.headers['x-pipeline-secret'] !== opts.sharedSecret) {
@@ -254,7 +265,17 @@ export function createPipelineServer(deps: PipelineDeps, opts: PipelineServerOpt
         return send(res, 400, { error: 'invalid request', details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
       }
 
-      const result = await handlePipeline(deps, parsed.data);
+      // При входе по сессии файл можно указать только из своей папки загрузок: иначе парсер прочитал бы любой путь сервера.
+      let request = parsed.data;
+      if (opts.auth && request.files?.length) {
+        const own = opts.uploadDir ? await verifyOwnUploads(opts.uploadDir, request.user_id, request.files) : null;
+        if (!own) {
+          return send(res, 400, { error: 'invalid request', details: ['files: ссылка не ведёт на файл, загруженный этим пользователем'] });
+        }
+        request = { ...request, files: own };
+      }
+
+      const result = await handlePipeline(deps, request);
       return send(res, result.status === 'ERROR' ? 422 : 200, result);
     } catch (err) {
       deps.logger.error('[http] unhandled', err);

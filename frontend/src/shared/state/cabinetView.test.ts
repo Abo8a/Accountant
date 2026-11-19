@@ -32,6 +32,7 @@ const STATE: CabinetState = {
   files_limit: 10,
   founder: { full_name: 'Корина Нина Сергеевна' },
   study_certificate: null,
+  files: [],
   project_status: 'generating',
   passport: [
     field(4, 'product_summary', 'Создание системы контроля сварных швов по фото, для малых заводов.'),

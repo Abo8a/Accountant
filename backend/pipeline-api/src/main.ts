@@ -39,7 +39,7 @@ async function main() {
     service: new AuthService(sql, createMailFromConfig(cfg), cfg.authSecret),
     cookieSecure: cfg.authCookieSecure,
   };
-  const server = createPipelineServer(deps, { sharedSecret: cfg.sharedSecret, support: supportOptionsFromConfig(cfg), auth });
+  const server = createPipelineServer(deps, { sharedSecret: cfg.sharedSecret, support: supportOptionsFromConfig(cfg), auth, uploadDir: cfg.uploadDir });
   server.listen(cfg.port, () => console.log(`pipeline-api listening on :${cfg.port}`));
 }
 

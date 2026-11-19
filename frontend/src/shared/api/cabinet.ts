@@ -10,6 +10,19 @@ export interface StudyCertificate {
   uploaded_at: string;
 }
 
+/** Загруженный материал проекта (файл, из которого Буха собирает паспорт). */
+export interface CabinetFile {
+  id: string;
+  file_name: string;
+  sha256_hash: string;
+  uploaded_at: string;
+  /** null — размер неизвестен (файл загружен до того, как размер стали сохранять). */
+  size_bytes: number | null;
+  total_pages: number | null;
+  /** Сколько утверждений паспорта опираются на этот файл. */
+  claims: number;
+}
+
 export interface CabinetResult {
   eligibility_status: 'ELIGIBLE' | 'NEEDS_CLARIFICATION' | 'NOT_ELIGIBLE';
   summary: string;
@@ -26,6 +39,7 @@ export interface CabinetState {
   files_limit: number;
   founder: { full_name?: string; contacts?: string; education_status?: string; university?: string; region?: string };
   study_certificate: StudyCertificate | null;
+  files: CabinetFile[];
   project_status: string | null;
   passport: PipelinePassportField[];
   block_audits: BlockAuditOut[];

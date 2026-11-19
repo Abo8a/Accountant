@@ -10,6 +10,8 @@ export const DEFAULT_MANIFEST_PATH = resolve(BACKEND_DIR, 'kb', 'programs', 'stu
 /** Папка pipeline-api/ (содержит src/ и outbox/). */
 export const PIPELINE_API_DIR = resolve(here, '..');
 export const DEFAULT_OUTBOX_DIR = resolve(PIPELINE_API_DIR, 'outbox');
+/** Загруженные материалы проектов (по умолчанию рядом с сервисом; в Docker — общий том, который читает и парсер). */
+export const DEFAULT_UPLOAD_DIR = resolve(PIPELINE_API_DIR, 'uploads');
 
 function tryLoadEnv() {
   if (typeof process.loadEnvFile === 'function') {
@@ -58,6 +60,11 @@ export interface AppConfig {
   supportAllowedOrigin: string;
   /** Папка писем для адаптера OutboxMail (OUTBOX_DIR). */
   outboxDir: string;
+  /**
+   * Папка загруженных материалов проектов (UPLOAD_DIR). Парсер читает файлы по тому же абсолютному пути,
+   * поэтому в Docker это общий том, смонтированный по одному пути в pipeline и parser.
+   */
+  uploadDir: string;
   /** Секрет для HMAC кодов входа (AUTH_SECRET). Обязателен для входа по коду. */
   authSecret: string | undefined;
   /** Cookie сессии только с Secure (по умолчанию да; false — только локальный http). */
@@ -103,6 +110,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     supportEmail: env.SUPPORT_EMAIL || 'test@test.com',
     supportAllowedOrigin: env.SUPPORT_ALLOWED_ORIGIN || 'http://localhost:5173',
     outboxDir: env.OUTBOX_DIR || DEFAULT_OUTBOX_DIR,
+    uploadDir: resolve(env.UPLOAD_DIR || DEFAULT_UPLOAD_DIR),
     authSecret: env.AUTH_SECRET || undefined,
     authCookieSecure: env.AUTH_COOKIE_SECURE !== 'false',
     smtp: {

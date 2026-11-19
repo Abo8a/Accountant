@@ -10,7 +10,9 @@ flowchart LR
   FE -- POST /pipeline + x-pipeline-secret --> PIPE[pipeline-api<br/>TypeScript: оркестратор]
   PIPE -- SQL --> SB
   PIPE -- POST /parse --> PARSER[parser-service<br/>FastAPI: PDF/PPTX/DOCX + OCR]
-  PARSER -- s3:// / file:// --> S3[(приватный бакет)]
+  PIPE -- POST /pipeline/files --> VOL[(том uploads<br/>/data/uploads)]
+  PARSER -- file:// --> VOL
+  PARSER -- s3:// --> S3[(приватный бакет, не используется)]
   PIPE -- HTTPS --> LLM[LLM API<br/>chat JSON + embeddings 1536]
   PIPE -. код .-> CORE[packages/passport-core<br/>spans, audit, rule engine]
   PIPE -. типы .-> CONTRACTS[packages/contracts]
@@ -53,6 +55,16 @@ Accountant/
 6. **Выход** — Rule Engine (детерминированно), навигатор (LLM: резюме + чек-лист), запись в section 0, статус проекта `review` → `COMPLETED`.
 
 Пайплайн stateless: фронтенд передаёт `target_field` и `previous_question` (Вопрос 3, вариант А).
+
+### Загрузка материалов проекта
+
+Файлы лежат на общем томе `uploads`: pipeline монтирует его в `/data/uploads` на запись (`UPLOAD_DIR`), parser — на чтение по тому же пути. Путь файла: `/data/uploads/<user_id>/<sha256>.<pdf|docx|pptx>`; имя из запроса на диск не попадает. **Том нужно бэкапить вместе с базой**: в `project_sources` хранится только ссылка и извлечённый текст.
+
+Загрузка — два запроса, потому что разбор занимает минуты:
+1. `POST /pipeline/files` (тело — файл, имя в `x-file-name`, до 25 МБ; PDF, DOCX, PPTX) — проверяет тариф (`ai_parsing`), лимит и дубль по sha256, сохраняет файл. Ответ сразу: `OK` + ссылка, `DUPLICATE` либо 422 (`PLAN_UPGRADE_REQUIRED`, `FILE_QUOTA_EXCEEDED`, `INVALID_FIELD_VALUE`).
+2. `POST /pipeline` с `files: [{file_name, file_url, sha256_hash}]` — парсер читает файл, пайплайн извлекает факты. При входе по сессии `file_url` обязан вести в папку этого пользователя, имя файла обязано совпадать с хешем: иначе 400 (без этого парсер прочитал бы любой путь сервера).
+
+Прочее: `GET /pipeline/state` отдаёт `files` (имя, размер, страницы, число утверждений); `GET /pipeline/files/:id` — скачивание; `DELETE /pipeline/files/:id` — удаление записи и файла (утверждения остаются без источника). Сканы принимаются только внутри PDF (OCR делает парсер); картинки парсер не разбирает.
 
 ## 4. Где живёт логика
 

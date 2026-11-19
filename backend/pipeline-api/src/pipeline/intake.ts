@@ -22,7 +22,8 @@ export async function ingestFiles(deps: PipelineDeps, projectId: string, files: 
       file_url: file.file_url,
       sha256_hash: file.sha256_hash.toLowerCase(),
       extracted_text: parsed.extracted_text,
-      metadata: parsed.metadata,
+      // Размер нужен экрану «Материалы»; парсер его не возвращает.
+      metadata: file.size_bytes === undefined ? parsed.metadata : { ...parsed.metadata, size_bytes: file.size_bytes },
     });
     added.push({
       id,

@@ -29,6 +29,7 @@ export const pipelineRequestSchema = z
           file_name: z.string().min(1).max(255),
           file_url: z.string().min(1).max(2_048),
           sha256_hash: z.string().regex(/^[a-fA-F0-9]{64}$/),
+          size_bytes: z.number().int().nonnegative().optional(),
         }),
       )
       .max(20)

@@ -73,6 +73,17 @@ export interface SourceRow {
   metadata: { pages?: { page: number; text: string }[] } | null;
 }
 
+export interface ProjectFileRow {
+  id: string;
+  file_name: string;
+  sha256_hash: string;
+  uploaded_at: string;
+  size_bytes: number | null;
+  total_pages: number | null;
+  /** Сколько утверждений паспорта опираются на этот файл. */
+  claims: number;
+}
+
 export interface ClaimRow {
   claim_text: string;
   claim_type: ClaimType;
@@ -247,6 +258,51 @@ export class PassportStore {
       [projectId],
     );
     return rows;
+  }
+
+  /** Материалы проекта для кабинета: без текста, с числом утверждений, которые из них извлечены. */
+  async listProjectFiles(projectId: string): Promise<ProjectFileRow[]> {
+    const { rows } = await this.sql.query(
+      `SELECT s.id, s.file_name, s.sha256_hash, s.created_at AS uploaded_at,
+              (s.metadata ->> 'size_bytes')::bigint AS size_bytes,
+              (s.metadata ->> 'total_pages')::int   AS total_pages,
+              (SELECT COUNT(*)::int FROM project_claims c WHERE c.source_id = s.id) AS claims
+         FROM project_sources s
+        WHERE s.project_id = $1::uuid
+        ORDER BY s.created_at, s.id`,
+      [projectId],
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      file_name: r.file_name,
+      sha256_hash: r.sha256_hash,
+      uploaded_at: new Date(r.uploaded_at).toISOString(),
+      size_bytes: r.size_bytes === null ? null : Number(r.size_bytes),
+      total_pages: r.total_pages === null ? null : Number(r.total_pages),
+      claims: Number(r.claims),
+    }));
+  }
+
+  /** Источник пользователя по id (проект привязан к пользователю): имя и путь к файлу или null. */
+  async getUserSource(userId: string, sourceId: string): Promise<{ id: string; file_name: string; file_url: string } | null> {
+    const { rows } = await this.sql.query(
+      `SELECT s.id, s.file_name, s.file_url
+         FROM project_sources s JOIN app_projects p ON p.id = s.project_id
+        WHERE s.id = $2::uuid AND p.user_id = $1::uuid`,
+      [userId, sourceId],
+    );
+    return rows[0] ?? null;
+  }
+
+  /** Удаляет источник пользователя. Утверждения остаются: project_claims.source_id → SET NULL. */
+  async deleteUserSource(userId: string, sourceId: string): Promise<boolean> {
+    const { rows } = await this.sql.query(
+      `DELETE FROM project_sources s USING app_projects p
+        WHERE s.id = $2::uuid AND s.project_id = p.id AND p.user_id = $1::uuid
+        RETURNING s.id`,
+      [userId, sourceId],
+    );
+    return rows.length > 0;
   }
 
   /** UPSERT поля паспорта (UNIQUE project_id, section_id, field_key). Возвращает id записи. */

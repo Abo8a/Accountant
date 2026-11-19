@@ -90,6 +90,9 @@ services:
     restart: unless-stopped
     ports:
       - "${PARSER_HOST_PORT:?}:8000"
+    volumes:
+      # Материалы проектов: пайплайн пишет, парсер только читает по тому же пути (file:///data/uploads/<user>/<sha256>.<ext>).
+      - uploads:/data/uploads:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 5s
@@ -126,6 +129,8 @@ services:
       SUPABASE_DB_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
       PARSER_URL: http://parser:8000
       OUTBOX_DIR: /srv/backend/pipeline-api/outbox
+      # Загруженные материалы проектов — общий том с парсером (его нужно бэкапить вместе с базой).
+      UPLOAD_DIR: /data/uploads
       # Путь к манифесту внутри образа (COPY backend/kb).
       KB_MANIFEST_PATH: /srv/backend/kb/programs/student-startup/manifest.json
       # Кучу Node держим под лимит контейнера: иначе V8 раздувается до лимита и контейнер убивается OOM.
@@ -134,6 +139,7 @@ services:
       - "${PIPELINE_HOST_PORT:?}:8080"
     volumes:
       - ./backend/pipeline-api/outbox:/srv/backend/pipeline-api/outbox
+      - uploads:/data/uploads
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 5s
@@ -212,5 +218,6 @@ services:
 
 volumes:
   pgdata:
+  uploads:
   caddy_data:
   caddy_config:

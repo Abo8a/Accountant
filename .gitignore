@@ -38,3 +38,6 @@ backend/pipeline-api/data/pgdata/
 repomix*
 
 
+
+# Загруженные материалы проектов (локальная разработка; в Docker — том uploads)
+backend/pipeline-api/uploads/

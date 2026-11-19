@@ -18,9 +18,12 @@ import {
   type FilesApi,
   type FilesPlanId,
   type ProjectFile,
+  type UploadCompletion,
   type UploadStatus,
 } from './Files.model';
 import { useCabinetState } from '../../shared/state/cabinet';
+import { RETRY_MESSAGE } from '../../shared/api/files';
+import { LIVE_ACCEPT, liveFilesApi, projectFileFromCabinet } from './Files.live';
 import './Files.css';
 
 // Экран «Материалы проекта». Эталон: design/project/Files.dc.html.
@@ -37,23 +40,20 @@ export interface FilesProps {
   aiParsingEnabled?: boolean;
   /** Начальный список файлов (живой режим — файлы пользователя; по умолчанию — пример из макета). */
   initialFiles?: ProjectFile[];
-  /** Живой режим: загрузка материалов проекта к бэкенду ещё не подключена — вместо зоны загрузки показывается эта пояснение. */
-  uploadUnavailable?: string;
 }
 
-/** Живой режим: тариф и файлы пользователя (справка об обучении) вместо примера из макета. */
+/**
+ * Живой режим: тариф и материалы пользователя вместо примера из макета; файлы уходят на сервер и разбираются пайплайном.
+ * Справка об обучении — документ профиля, а не материал проекта: в лимит файлов тарифа не входит.
+ */
 export function LiveFiles() {
   const state = useCabinetState();
   if (!state) return null;
-  // Справка об обучении — документ профиля, а не материал проекта: в лимит файлов тарифа не входит.
-  const certNote = state.study_certificate
-    ? `Справка об обучении («${state.study_certificate.file_name}») загружена в профиль.`
-    : 'Справку об обучении загрузите в профиле или в блоке 1 паспорта.';
   return (
     <Files
+      api={liveFilesApi}
       plan={state.plan_id}
-      initialFiles={[]}
-      uploadUnavailable={`Разбор материалов проекта (презентации, документы) скоро появится. ${certNote}`}
+      initialFiles={state.files.map((file, i) => projectFileFromCabinet(file, i + 1))}
     />
   );
 }
@@ -78,8 +78,10 @@ const SWAP_TITLE = 'Похоже, это материалы другого пр�
 // Текст инлайн-карточки придуман для экрана (короткий, на «вы»), в эталоне Files его нет.
 const SWAP_BODY = 'Файл не сохранён: один аккаунт — один проект. Если это ошибка, напишите в поддержку.';
 
-function toastForOutcome(status: UploadStatus, name: string): Toast {
+function toastForOutcome(status: UploadStatus, name: string, message?: string): Toast {
   switch (status) {
+    case 'rejected':
+      return { tone: 'danger', text: message ?? RETRY_MESSAGE };
     case 'accepted':
       return {
         tone: 'success',
@@ -97,7 +99,8 @@ function toastForOutcome(status: UploadStatus, name: string): Toast {
     case 'BLOCKED_PROJECT_SWAP':
       return {
         tone: 'danger',
-        text: `Похоже, это материалы другого проекта. Файл «${name}» не совпадает по смыслу с описанием Monetrix. Один аккаунт — один проект, поэтому мы его не сохранили.`,
+        // «Monetrix» — проект из макета; в живом режиме вместо него «вашего проекта» (название проекта в ответе не приходит).
+        text: `Похоже, это материалы другого проекта. Файл «${name}» не совпадает по смыслу с описанием ${message ?? 'Monetrix'}. Один аккаунт — один проект, поэтому мы его не сохранили.`,
       };
   }
 }
@@ -118,7 +121,7 @@ const EXT_CLASS: Record<ProjectFile['kind'], string> = {
   other: 'files__ext--other',
 };
 
-export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEnabled, initialFiles, uploadUnavailable }: FilesProps = {}) {
+export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEnabled, initialFiles }: FilesProps = {}) {
   // Отступы и зазор области из Files.dc.html (main: 36px 48px 64px, gap 28px). Маршрут /files не в ROUTE_SHELL.
   useCabinetShell({ mainPadding: '36px 48px 64px', mainGap: '28px' });
 
@@ -141,6 +144,26 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
     setFiles(next);
   };
 
+  /** Разбор закончился: строка получает число утверждений и id на сервере, а при неудаче исчезает (файл не сохраняем). */
+  async function finishParsing(rowId: number, name: string, completion: Promise<UploadCompletion>) {
+    const result = await completion.catch((): UploadCompletion => ({ outcome: 'error', message: RETRY_MESSAGE }));
+    if (result.outcome === 'done') {
+      commit(
+        filesRef.current.map((f) =>
+          f.id === rowId ? { ...f, st: 'ok', claims: result.claims, remoteId: result.remoteId, pages: result.pages ?? f.pages } : f,
+        ),
+      );
+      return;
+    }
+    commit(filesRef.current.filter((f) => f.id !== rowId));
+    if (result.outcome === 'BLOCKED_PROJECT_SWAP') {
+      setBlockedNotice(true);
+      setToast(toastForOutcome('BLOCKED_PROJECT_SWAP', name, 'вашего проекта'));
+    } else {
+      setToast({ tone: 'danger', text: result.message });
+    }
+  }
+
   async function handleFiles(picked: File[]) {
     // Функция тарифа выключена: загрузка не отправляется, ответ — 402 (тост; карточка уже на экране).
     if (!canUpload) {
@@ -152,15 +175,16 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
       for (const file of picked) {
         const sha256 = await sha256Hex(file);
         const sizeMb = file.size / 1048576;
-        const { status } = await api.upload({ name: file.name, sizeMb, sha256, existing: filesRef.current, fileLimit });
-        last = toastForOutcome(status, file.name);
+        const { status, message, completion } = await api.upload({ name: file.name, sizeMb, sha256, existing: filesRef.current, fileLimit, file });
+        last = toastForOutcome(status, file.name, message);
         if (status === 'BLOCKED_PROJECT_SWAP') setBlockedNotice(true);
         if (status === 'accepted') {
           const ext = extOf(file.name);
+          const rowId = nextIdRef.current++;
           commit([
             ...filesRef.current,
             {
-              id: nextIdRef.current++,
+              id: rowId,
               name: file.name,
               ext,
               kind: kindFromExt(ext),
@@ -171,6 +195,8 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
               sha256,
             },
           ]);
+          // Живой режим: файл уже на сервере, строка «Разбираем…» живёт, пока пайплайн извлекает факты (минуты).
+          if (completion) void finishParsing(rowId, file.name, completion);
         }
       }
     } catch {
@@ -197,21 +223,48 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
   const total = files.reduce((sum, f) => sum + f.mb, 0);
   const countPct = fileLimit > 0 ? `${Math.min(100, Math.round((files.length / fileLimit) * 100))}%` : '0%';
   const sizePct = `${Math.max(1, Math.round(total / 2))}%`;
-  const atLimit = canUpload && !uploadUnavailable && files.length >= fileLimit;
+  const atLimit = canUpload && files.length >= fileLimit;
+
+  // Файл, который ещё разбирается, на сервере пока без записи: скачать или удалить его нельзя (только в живом режиме).
+  const isPending = (f: ProjectFile) => Boolean(api.live) && !f.remoteId;
 
   const preview = files.find((f) => f.id === previewId) ?? null;
   const confirmFile = files.find((f) => f.id === confirmId) ?? null;
 
-  const removeConfirmed = () => {
-    if (!confirmFile) return;
-    commit(files.filter((f) => f.id !== confirmFile.id));
+  const finishRemoval = (target: ProjectFile) => {
+    commit(filesRef.current.filter((f) => f.id !== target.id));
     setConfirmId(null);
-    const lost = confirmFile.claims > 0;
+    const lost = target.claims > 0;
     setToast({
       tone: 'warning',
-      text: `Файл удалён. ${lost ? `${claimsWord(confirmFile.claims)} остались без источника.` : 'Место в лимите освободилось.'}`,
+      text: `Файл удалён. ${lost ? `${claimsWord(target.claims)} остались без источника.` : 'Место в лимите освободилось.'}`,
       link: lost ? { label: 'Проверить в паспорте', to: '/passport' } : undefined,
     });
+  };
+
+  const removeConfirmed = () => {
+    if (!confirmFile) return;
+    const target = confirmFile;
+    // Без серверного удаления (демо) файл исчезает сразу; с ним — только после ответа сервера, иначе строка бы вернулась после перезагрузки.
+    if (!api.remove) {
+      finishRemoval(target);
+      return;
+    }
+    const failed = () => {
+      setConfirmId(null);
+      setToast({ tone: 'danger', text: RETRY_MESSAGE });
+    };
+    api.remove(target).then((ok) => (ok ? finishRemoval(target) : failed()), failed);
+  };
+
+  /** Скачивание: в живом режиме — настоящий файл с сервера, в демо — текст из эталона. */
+  const download = (file: ProjectFile) => {
+    if (!api.live) {
+      setToast({ tone: 'neutral', text: 'Скачивание началось.' });
+      return;
+    }
+    const url = api.downloadUrl?.(file);
+    if (url) window.location.assign(url);
   };
 
   const toastStyle: Record<ToastTone, string> = {
@@ -228,14 +281,12 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
           <h1 className="files__title">Материалы проекта</h1>
           <p className="files__lead">Всё, из чего Буха собирает паспорт. Каждый факт в паспорте ссылается на файл и страницу отсюда.</p>
         </div>
-        {!uploadUnavailable && (
-          <button type="button" className="files__add" onClick={openPicker}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            Добавить файлы
-          </button>
-        )}
+        <button type="button" className="files__add" onClick={openPicker}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Добавить файлы
+        </button>
       </div>
 
       {toast && (
@@ -324,13 +375,13 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
               <button type="button" className="files__open" onClick={() => setPreviewId(f.id)}>
                 Открыть
               </button>
-              <button type="button" className="files__icon-btn" aria-label="Скачать файл" onClick={() => setToast({ tone: 'neutral', text: 'Скачивание началось.' })}>
+              <button type="button" className="files__icon-btn" aria-label="Скачать файл" disabled={isPending(f)} onClick={() => download(f)}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M12 4v12M7 11l5 5 5-5" />
                   <path d="M4 20h16" />
                 </svg>
               </button>
-              <button type="button" className="files__icon-btn files__icon-btn--danger" aria-label="Удалить файл" onClick={() => setConfirmId(f.id)}>
+              <button type="button" className="files__icon-btn files__icon-btn--danger" aria-label="Удалить файл" disabled={isPending(f)} onClick={() => setConfirmId(f.id)}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />
                 </svg>
@@ -343,16 +394,12 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
           ref={inputRef}
           type="file"
           multiple
-          accept={ACCEPT}
+          accept={api.live ? LIVE_ACCEPT : ACCEPT}
           hidden
           aria-label="Файлы для загрузки"
           onChange={onPick}
         />
-        {uploadUnavailable ? (
-          <Notice tone="info" title="Материалы проекта">
-            {uploadUnavailable}
-          </Notice>
-        ) : canUpload ? (
+        {canUpload ? (
           <>
             <button type="button" className="files__drop" onClick={openPicker} onDragOver={onDragOver} onDrop={onDrop}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -385,15 +432,18 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
                 </svg>
               </button>
             </div>
-            <div className="files__page-wrap">
-              <div className="files__page">
-                <span className="files__page-title" />
-                <span className="files__page-line files__page-line--long" />
-                <span className="files__page-line files__page-line--short" />
-                <span className="files__page-fact">Подтверждённый факт со стр. 4</span>
+            {/* Пример страницы из макета: в живом режиме страницы файла не показываем, чтобы не выдавать пример за содержимое. */}
+            {!api.live && (
+              <div className="files__page-wrap">
+                <div className="files__page">
+                  <span className="files__page-title" />
+                  <span className="files__page-line files__page-line--long" />
+                  <span className="files__page-line files__page-line--short" />
+                  <span className="files__page-fact">Подтверждённый факт со стр. 4</span>
+                </div>
+                <span className="files__page-count">Страница 4 из 15</span>
               </div>
-              <span className="files__page-count">Страница 4 из 15</span>
-            </div>
+            )}
             <div className="files__drawer-status">
               <span className="files__drawer-status-title">
                 {preview.st === 'parsing' ? 'Буха ещё разбирает файл' : `Буха нашла ${claimsWord(preview.claims)}`}
@@ -406,9 +456,10 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
               <button
                 type="button"
                 className="files__btn-dark"
+                disabled={isPending(preview)}
                 onClick={() => {
                   setPreviewId(null);
-                  setToast({ tone: 'neutral', text: 'Скачивание началось.' });
+                  download(preview);
                 }}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

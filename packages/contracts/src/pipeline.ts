@@ -40,6 +40,8 @@ export interface PipelineFileInput {
   file_name: string;
   file_url: string;     // путь в приватный S3-бакет (s3://bucket/key) или file:// для локальной разработки
   sha256_hash: string;
+  /** Размер файла в байтах: при входе по сессии его выставляет сервер по загруженному файлу, значение клиента не используется. */
+  size_bytes?: number;
 }
 
 export interface PipelineRequest {
