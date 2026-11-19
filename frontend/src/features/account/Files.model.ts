@@ -2,7 +2,7 @@
 // Правила загрузки — docs/user-flows.md F4 и F10: дубль по sha256 не занимает место в лимите,
 // файл с тем же именем и другим хешем — новый источник, превышение лимита — 429, Free — 402, чужой проект — BLOCKED_PROJECT_SWAP.
 
-import { PLANS, type Plan, type PlanId } from '../../shared/data/plans';
+import { getPlan, type Plan, type PlanId } from '../../shared/data/plans';
 
 export type FileKind = 'pdf' | 'scan' | 'docx' | 'other';
 
@@ -30,13 +30,11 @@ export interface ProjectFile {
 /** Лимит объёма («из 200 МБ» в Files.dc.html). */
 export const SIZE_LIMIT_MB = 200;
 
-/** Тариф берём из данных shared/data/plans.ts: лимит файлов — file_uploads_limit (pro 10, premium 50). */
+/** Тариф берём из данных shared/data/plans.ts: лимит файлов — file_uploads_limit (бесплатный 5, «Пакет ИИ» 10; старые pro 10, premium 50). */
 export type FilesPlanId = PlanId;
 
 export function filesPlan(id: PlanId): Plan {
-  const plan = PLANS.find((p) => p.id === id);
-  if (!plan) throw new Error(`Тариф не найден: ${id}`);
-  return plan;
+  return getPlan(id);
 }
 
 /** Ответ на загрузку: статусы совпадают с кодами бэкенда из user-flows F4 / F10 и States.dc.html. */

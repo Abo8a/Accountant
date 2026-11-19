@@ -8,7 +8,7 @@ import type { FilesApi, UploadStatus } from './Files.model';
 function renderFiles(props: FilesProps = {}) {
   return render(
     <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <Files plan="pro" {...props} />  {/* тесты сверяют эталон дизайна (тариф «Профессиональный», 10 файлов); по умолчанию — премиум, см. Files.default-plan.test.tsx */}
+      <Files plan="pro" {...props} />  {/* тесты сверяют эталон дизайна (10 файлов — старый «Профессиональный»); по умолчанию — бесплатный, см. Files.default-plan.test.tsx */}
     </MemoryRouter>,
   );
 }
@@ -59,7 +59,7 @@ describe('Files', () => {
   it('по умолчанию загрузка доступна: инлайн-карточек о тарифе и лимите нет', () => {
     renderFiles();
     expect(screen.getByText('Перетащите файлы сюда или', { exact: false })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Загрузка документов — на платном тарифе' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Загрузка документов выключена на вашем тарифе' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: /Лимит файлов исчерпан/ })).not.toBeInTheDocument();
   });
 
@@ -108,19 +108,20 @@ describe('Files', () => {
     await user.upload(pickInput(), pdf('Лишний.pdf', 'content-extra'));
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent(
-        'Лимит файлов исчерпан. Удалите ненужный файл или перейдите на «Премиум».',
+        'Лимит файлов исчерпан. Удалите ненужный файл — повторно загруженные копии в лимит не считаются.',
       ),
     );
     expect(counter()).toHaveAttribute('aria-valuenow', '10');
     expect(screen.queryByText('Лишний.pdf')).not.toBeInTheDocument();
   });
 
-  it('429 от данных: при 10 из 10 появляется карточка «Лимит файлов исчерпан» с переходом на тарифы', async () => {
+  it('429 от данных: при 10 из 10 карточка «Лимит файлов исчерпан»; больше 10 файлов тарифов нет — только «удалите ненужный»', async () => {
     const user = userEvent.setup();
     renderFiles();
     await fillTo(user, 10);
     const notice = screen.getByRole('region', { name: 'Лимит файлов исчерпан: 10 из 10' });
-    expect(within(notice).getByRole('link', { name: 'Тарифы' })).toHaveAttribute('href', '/billing');
+    expect(within(notice).queryByRole('link', { name: 'Тарифы' })).not.toBeInTheDocument();
+    expect(within(notice).getByText(/Чтобы добавить новый файл, удалите ненужный\./)).toBeInTheDocument();
     expect(within(notice).getByText('Повторно загруженные копии в лимит не считаются.', { exact: false })).toBeInTheDocument();
   });
 
@@ -128,44 +129,52 @@ describe('Files', () => {
     renderFiles({ plan: 'premium' });
     expect(screen.getByText('из 50')).toBeInTheDocument();
     expect(counter()).toHaveAttribute('aria-valuemax', '50');
-    expect(screen.getByText('Тариф «Премиум»')).toBeInTheDocument();
+    expect(screen.getByText('Тариф «Премиум»')).toBeInTheDocument(); // старая подписка: показываем до конца срока
     expect(screen.queryByRole('link', { name: /Нужно больше/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: /Лимит файлов исчерпан/ })).not.toBeInTheDocument();
   });
 
-  it('тариф «Базовый»: загрузка открыта, лимит 5 из данных тарифа, пейволла нет', () => {
+  it('бесплатный тариф: загрузка открыта, лимит 5, пейволла нет, предлагаем «Пакет ИИ» на 10 файлов', () => {
     renderFiles({ plan: 'free' });
     expect(screen.getByText('из 5')).toBeInTheDocument();
     expect(counter()).toHaveAttribute('aria-valuemax', '5');
-    expect(screen.getByText('Тариф «Базовый»')).toBeInTheDocument();
+    expect(screen.getByText('Тариф «Бесплатный»')).toBeInTheDocument();
     expect(screen.getByText('Перетащите файлы сюда или', { exact: false })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Загрузка документов — на платном тарифе' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Нужно больше/ })).toHaveAttribute('href', '/billing');
+    expect(screen.queryByRole('region', { name: 'Загрузка документов выключена на вашем тарифе' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Нужно больше — «Пакет ИИ», 10 файлов' })).toHaveAttribute('href', '/billing');
   });
 
-  it('тариф «Базовый»: при 5 из 5 появляется карточка лимита, шестой файл отклоняется (429)', async () => {
+  it('«Пакет ИИ»: лимит 10, ссылки «Нужно больше» нет', () => {
+    renderFiles({ plan: 'ai_pack' });
+    expect(screen.getByText('из 10')).toBeInTheDocument();
+    expect(screen.getByText('Тариф «Пакет ИИ»')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Нужно больше/ })).not.toBeInTheDocument();
+  });
+
+  it('бесплатный тариф: при 5 из 5 карточка лимита с предложением «Пакета ИИ», шестой файл отклоняется (429)', async () => {
     const user = userEvent.setup();
     renderFiles({ plan: 'free' });
     await fillTo(user, 5);
     const notice = screen.getByRole('region', { name: 'Лимит файлов исчерпан: 5 из 5' });
     expect(within(notice).getByRole('link', { name: 'Тарифы' })).toHaveAttribute('href', '/billing');
+    expect(within(notice).getByText(/подключите «Пакет ИИ»: там до 10 файлов/)).toBeInTheDocument();
 
     await user.upload(pickInput(), pdf('Шестой.pdf', 'content-sixth'));
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent(
-        'Лимит файлов исчерпан. Удалите ненужный файл или перейдите на «Премиум».',
+        'Лимит файлов исчерпан. Удалите ненужный файл — повторно загруженные копии в лимит не считаются.',
       ),
     );
     expect(counter()).toHaveAttribute('aria-valuenow', '5');
     expect(screen.queryByText('Шестой.pdf')).not.toBeInTheDocument();
   });
 
-  it('пейволл Free (402) от сервера: тост с текстом тарифа и переходом на /billing', async () => {
+  it('402 от сервера (админ выключил разбор документов): тост с текстом тарифа и переходом на /billing', async () => {
     const user = userEvent.setup();
     renderFiles({ api: apiReturning('PLAN_UPGRADE_REQUIRED') });
     await user.upload(pickInput(), pdf('Pismo_o_pilote.pdf', 'free-plan'));
     const status = await screen.findByRole('status');
-    expect(status).toHaveTextContent('Загрузка документов — на платном тарифе');
+    expect(status).toHaveTextContent('Загрузка документов выключена на вашем тарифе');
     expect(within(status).getByRole('link', { name: 'Тарифы' })).toHaveAttribute('href', '/billing');
     expect(counter()).toHaveAttribute('aria-valuenow', '3');
   });
@@ -175,14 +184,14 @@ describe('Files', () => {
     const user = userEvent.setup();
     renderFiles({ api, aiParsingEnabled: false });
 
-    const notice = screen.getByRole('region', { name: 'Загрузка документов — на платном тарифе' });
-    expect(within(notice).getByText('На Базовом тарифе паспорт собирается по анкете. Чтобы разобрать презентацию и привязать факты к страницам, подключите «Профессиональный».')).toBeInTheDocument();
+    const notice = screen.getByRole('region', { name: 'Загрузка документов выключена на вашем тарифе' });
+    expect(within(notice).getByText('Паспорт можно собрать по анкете. Чтобы разобрать презентацию и привязать факты к страницам, посмотрите тарифы.')).toBeInTheDocument();
     expect(within(notice).getByRole('link', { name: 'Тарифы' })).toHaveAttribute('href', '/billing');
     expect(screen.queryByText('Перетащите файлы сюда или', { exact: false })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Добавить файлы' }));
     await user.upload(pickInput(), pdf('Pismo_o_pilote.pdf', 'free-plan'));
-    expect(await screen.findByRole('status')).toHaveTextContent('Загрузка документов — на платном тарифе');
+    expect(await screen.findByRole('status')).toHaveTextContent('Загрузка документов выключена на вашем тарифе');
     expect(api.upload).not.toHaveBeenCalled();
     expect(counter()).toHaveAttribute('aria-valuenow', '3');
   });

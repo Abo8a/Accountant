@@ -150,6 +150,20 @@
   color: var(--color-gray-800);
 }
 
+/* Остаток ИИ-кредитов в правой части плашки текущего тарифа (монетизация v2). */
+.billing__credits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 160px;
+}
+
+.billing__credits-value {
+  font-size: var(--fs-32);
+  font-weight: var(--font-extrabold);
+  color: var(--color-ink);
+}
+
 .billing__renew {
   min-height: var(--control-h-cta);
   padding: 0 var(--space-28);

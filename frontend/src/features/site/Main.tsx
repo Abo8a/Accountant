@@ -1,8 +1,7 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PillLink, SegmentedControl } from '../../shared/ui';
+import { PillLink } from '../../shared/ui';
 import { SiteLayout } from '../../shared/layout/SiteLayout';
-import { PERIOD_OPTIONS, PricingCards, type Period } from './PricingCards';
+import { PricingCards, ServiceCards } from './PricingCards';
 import { Mascot } from './SiteArt';
 import './Main.css';
 
@@ -31,8 +30,9 @@ const PASSPORT_POINTS = [
 const FAQ = [
   { q: 'Буха гарантирует победу в конкурсе?', a: 'Нет. Буха помогает честно и полно описать проект и заранее увидеть формальные стоп-факторы. Решение принимает фонд.' },
   { q: 'Почему один аккаунт — один проект?', a: 'Паспорт привязан к описанию вашего проекта. Если загрузить материалы другого проекта, система их не примет — так паспорт не смешивает чужие факты с вашими.' },
-  { q: 'Какие файлы можно загрузить?', a: 'PDF, DOCX и PPTX, включая сканы. Загрузка доступна на тарифах «Профессиональный» и «Премиум».' },
-  { q: 'Что будет с паспортом, когда закончится подписка?', a: 'Паспорт, файлы и экспорт останутся. Новые загрузки и проверка новизны станут доступны после продления.' },
+  { q: 'Какие файлы можно загрузить?', a: 'PDF, DOCX и PPTX, включая сканы. Бесплатно — до 5 файлов, с «Пакетом ИИ» — до 10.' },
+  { q: 'Что будет, когда закончатся ИИ-кредиты?', a: 'Паспорт, материалы, ручное редактирование и экспорт останутся. Работу ИИ можно продолжить с «Пакетом ИИ» — 499 ₽ за 30 дней, без автопродления.' },
+  { q: 'Нужно ли платить процент после победы?', a: 'Нет, если вы готовили заявку сами. 5% от полученного финансирования — только за сопровождение по отдельному договору, заключённому заранее, и не из средств гранта.' },
   { q: 'Это официальный сервис фонда?', a: 'Нет. Буха — независимый сервис подготовки. Заявка подаётся в официальной системе фонда.' },
 ];
 
@@ -48,8 +48,6 @@ function FeatureIcon({ paths }: { paths: string[] }) {
 }
 
 export function Main() {
-  const [period, setPeriod] = useState<Period>('first');
-
   return (
     <SiteLayout>
       <section className="main__hero">
@@ -180,16 +178,9 @@ export function Main() {
             </svg>
           </Link>
         </div>
-        <div className="main__tariffs-toggle">
-          <SegmentedControl
-            mode="buttons"
-            ariaLabel="Период оплаты"
-            options={PERIOD_OPTIONS}
-            value={period}
-            onChange={(id) => setPeriod(id as Period)}
-          />
-        </div>
-        <PricingCards period={period} headingLevel={3} className="main__plans" />
+        <PricingCards headingLevel={3} className="main__plans" />
+        <h3 className="t-screen-title main__services-title">Услуги специалистов</h3>
+        <ServiceCards headingLevel={3} className="main__plans" />
       </section>
 
       <section id="faq" className="main__section main__section--faq">

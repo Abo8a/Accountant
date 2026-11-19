@@ -18,6 +18,9 @@ const PREVIEW_CHARS = 500;
 const ERROR_CHARS = 500;
 
 export class LoggedLlm implements LlmClient {
+  /** Успешные вызовы модели (complete) в этом запросе: по ним решаем, списывать ли ИИ-кредиты. */
+  completeCalls = 0;
+
   constructor(
     private readonly inner: LlmClient,
     private readonly sink: LlmLogSink,
@@ -39,6 +42,7 @@ export class LoggedLlm implements LlmClient {
     const started = Date.now();
     try {
       const out = await this.inner.complete(task, input);
+      this.completeCalls += 1;
       await this.write({ task, status: 'ok', duration_ms: Date.now() - started, response_preview: preview(out) });
       return out;
     } catch (err) {

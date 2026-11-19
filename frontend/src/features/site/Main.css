@@ -454,8 +454,9 @@
   font-weight: var(--font-semibold);
 }
 
-.main__tariffs-toggle {
-  align-self: flex-start;
+/* Подзаголовок над карточками услуг (монетизация v2). */
+.main__services-title {
+  margin-top: var(--space-32);
 }
 
 /* Карточки — PricingCards.css; в эталоне лендинга над сеткой 8px */

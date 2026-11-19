@@ -110,6 +110,6 @@ describe('Gaps', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Проверить сравнение' }));
     expect(screen.getByRole('link', { name: 'Продолжить без сравнения' })).toHaveAttribute('href', '/result');
     expect(screen.getByRole('status')).toHaveTextContent('Сравнение всё ещё неполное.');
-    expect(screen.getByText('На тарифе «Базовый» этот шаг пропускается, а в чек-листе появляется пометка о непроверенной новизне.')).toBeInTheDocument();
+    expect(screen.getByText('Если проверка новизны выключена на вашем тарифе, этот шаг пропускается, а в чек-листе появляется пометка о непроверенной новизне.')).toBeInTheDocument();
   });
 });

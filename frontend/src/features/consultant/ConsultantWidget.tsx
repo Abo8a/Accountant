@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { ChatMessageOut } from '@passport/contracts';
-import { fetchChatHistory, sendChatMessage } from './chatApi';
+import { ChatCreditsError, fetchChatHistory, sendChatMessage } from './chatApi';
 import './ConsultantWidget.css';
 
 export interface ConsultantWidgetProps {
@@ -115,7 +115,7 @@ export function ConsultantWidget({ activeSectionId, userId, openSignal = 0 }: Co
         });
       }
     } catch (err: any) {
-      setError('Не удалось получить ответ консультанта. Попробуйте ещё раз.');
+      setError(err instanceof ChatCreditsError ? err.message : 'Не удалось получить ответ консультанта. Попробуйте ещё раз.');
     } finally {
       setIsSending(false);
     }

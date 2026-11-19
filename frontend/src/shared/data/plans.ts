@@ -1,8 +1,12 @@
-// Тарифы «Буха». Источник значений name, price_rub, duration_days, file_uploads_limit,
-// renewal_discount_percent, features — backend/supabase/seed/0001_settings_and_plans.sql (billing_plans).
-// Поля description в seed нет: тексты ниже временные, подменяются данными админки.
+// Тарифы «Буха» (монетизация v2). Источник значений — backend/supabase/seed/0001_settings_and_plans.sql (billing_plans)
+// и миграция 0013_ai_credits.sql. Поля description в seed нет: тексты ниже временные, подменяются данными админки.
+//
+// Продаются два тарифа: бесплатный (20 ИИ-кредитов один раз) и «Пакет ИИ» (499 ₽ за 30 дней, 60 кредитов, без автопродления).
+// «Профессиональный» и «Премиум» больше не продаются; их id остаются для старых подписок и платежей.
 
-export type PlanId = 'free' | 'pro' | 'premium';
+export type ActivePlanId = 'free' | 'ai_pack';
+export type LegacyPlanId = 'pro' | 'premium';
+export type PlanId = ActivePlanId | LegacyPlanId;
 
 export interface PlanFeatures {
   ai_parsing: boolean;
@@ -17,23 +21,54 @@ export interface Plan {
   duration_days: number;
   file_uploads_limit: number;
   renewal_discount_percent: number;
+  /** ИИ-кредиты тарифа: у бесплатного — один раз, у пакета — на срок подписки. */
+  ai_credits: number;
+  /** false — тариф больше не продаётся (старые подписки). */
+  is_active: boolean;
   features: PlanFeatures;
   /** временный текст, подменяется данными админки */
   description: string;
 }
 
+const ALL_FEATURES: PlanFeatures = { ai_parsing: true, novelty_check: true, consultant: true };
+
+/** Бесплатные ИИ-кредиты: выдаются один раз, не обновляются каждый месяц. */
+export const FREE_AI_CREDITS = 20;
+/** Кредиты «Пакета ИИ» на 30 дней. */
+export const PACK_AI_CREDITS = 60;
+
+/** Тарифы, которые продаются сейчас. */
 export const PLANS: readonly Plan[] = [
   {
     id: 'free',
-    name: 'Базовый',
+    name: 'Бесплатный',
     price_rub: 0,
-    duration_days: 30,
+    duration_days: 0,
     file_uploads_limit: 5,
     renewal_discount_percent: 0,
-    features: { ai_parsing: true, novelty_check: false, consultant: false },
+    ai_credits: FREE_AI_CREDITS,
+    is_active: true,
+    features: { ...ALL_FEATURES },
     // временный текст, подменяется данными админки
-    description: 'Паспорт, анкета, стоп-факторы и экспорт. До 5 файлов, без проверки новизны.',
+    description: 'Паспорт, материалы, ручное редактирование и экспорт. До 5 файлов и 20 ИИ-кредитов один раз.',
   },
+  {
+    id: 'ai_pack',
+    name: 'Пакет ИИ',
+    price_rub: 499,
+    duration_days: 30,
+    file_uploads_limit: 10,
+    renewal_discount_percent: 0,
+    ai_credits: PACK_AI_CREDITS,
+    is_active: true,
+    features: { ...ALL_FEATURES },
+    // временный текст, подменяется данными админки
+    description: '60 ИИ-кредитов на 30 дней и до 10 файлов. Без автопродления.',
+  },
+];
+
+/** Старые тарифы: не продаются, нужны, чтобы показать название у действующих подписок и в истории платежей. */
+export const LEGACY_PLANS: readonly Plan[] = [
   {
     id: 'pro',
     name: 'Профессиональный',
@@ -41,9 +76,10 @@ export const PLANS: readonly Plan[] = [
     duration_days: 30,
     file_uploads_limit: 10,
     renewal_discount_percent: 15,
+    ai_credits: 0,
+    is_active: false,
     features: { ai_parsing: true, novelty_check: true, consultant: false },
-    // временный текст, подменяется данными админки
-    description: 'До 10 файлов, разбор документов ИИ и проверка новизны.',
+    description: 'Тариф больше не продаётся. Действует до конца оплаченного срока.',
   },
   {
     id: 'premium',
@@ -52,16 +88,22 @@ export const PLANS: readonly Plan[] = [
     duration_days: 30,
     file_uploads_limit: 50,
     renewal_discount_percent: 10,
-    features: { ai_parsing: true, novelty_check: true, consultant: true },
-    // временный текст, подменяется данными админки
-    description: 'До 50 файлов, разбор документов ИИ, проверка новизны и консультант.',
+    ai_credits: 0,
+    is_active: false,
+    features: { ...ALL_FEATURES },
+    description: 'Тариф больше не продаётся. Действует до конца оплаченного срока.',
   },
 ];
 
 export function getPlan(id: PlanId): Plan {
-  const plan = PLANS.find((p) => p.id === id);
+  const plan = PLANS.find((p) => p.id === id) ?? LEGACY_PLANS.find((p) => p.id === id);
   if (!plan) throw new Error(`Неизвестный тариф: ${id}`);
   return plan;
+}
+
+/** Тариф по id с сервера; незнакомый id показываем как бесплатный, а не роняем экран. */
+export function planOrFree(id: string | null | undefined): Plan {
+  return PLANS.find((p) => p.id === id) ?? LEGACY_PLANS.find((p) => p.id === id) ?? PLANS[0]!;
 }
 
 /** Склонение слова «день» по числу: 1 день, 2 дня, 5 дней, 23 дня. */
@@ -73,47 +115,78 @@ export function pluralDays(count: number): string {
   return 'дней';
 }
 
-/** Текст на карточке «Базовый» (как в эталоне): тариф включится сам после окончания платного. */
-export const AUTO_RESTORE_NOTE = 'Включится автоматически после окончания платного тарифа';
-
-/** Действие карточки тарифа: карточка скрыта, поясняющий текст или кнопка. */
-export type PlanCardAction =
-  | { kind: 'hidden' }
-  | { kind: 'note'; text: string }
-  | { kind: 'button'; label: string };
-
-export interface PlanCardActions {
-  free: PlanCardAction;
-  pro: PlanCardAction;
-  premium: PlanCardAction;
+/** Склонение слова «кредит»: 1 кредит, 2 кредита, 5 кредитов. */
+export function pluralCredits(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'кредит';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'кредита';
+  return 'кредитов';
 }
+
+/** Как считаются кредиты (значения по умолчанию app_settings.ai_credit_costs) — для страницы тарифов и кабинета. */
+export const CREDITS_EXPLAINED =
+  'ИИ-кредит — единица работы ИИ: шаг с ИИ или сообщение консультанту — 1 кредит, разбор одного файла — 2 кредита. ' +
+  'Технические ошибки кредиты не списывают. Ручное редактирование, материалы и экспорт работают и без кредитов.';
+
+/** Действие карточки «Пакет ИИ» в кабинете: кнопка или поясняющий текст. */
+export type PlanCardAction = { kind: 'note'; text: string } | { kind: 'button'; label: string };
 
 /**
- * Кнопки карточек тарифов по текущему тарифу (решение владельца).
- * daysLeft — оставшиеся дни подписки; нужны для текста на карточке «Базовый» при текущем «Премиум».
- * Карточка «Базовый» при текущем «Профессиональный» не оговорена владельцем: только текст, без действия (допущение в G3r2).
- * Карточка «Базовый» при текущем «Базовый» не выводится (как было раньше).
+ * Кнопка карточки «Пакет ИИ» по текущему тарифу. Автопродления нет: пакет подключают заново, когда нужен.
+ * daysLeft — оставшиеся дни действующего пакета.
  */
-export function planActions(currentPlanId: PlanId, daysLeft: number): PlanCardActions {
-  const hidden: PlanCardAction = { kind: 'hidden' };
-  const button = (label: string): PlanCardAction => ({ kind: 'button', label });
-  const note = (text: string): PlanCardAction => ({ kind: 'note', text });
-
-  switch (currentPlanId) {
-    case 'free':
-      return { free: hidden, pro: button('Улучшить'), premium: button('Улучшить') };
-    case 'pro':
-      return { free: note(AUTO_RESTORE_NOTE), pro: button('Продлить'), premium: button('Улучшить') };
-    case 'premium':
-      return {
-        free: note(`Вы вернётесь на данный тариф через ${daysLeft} ${pluralDays(daysLeft)}`),
-        pro: button('Перейти на Pro'),
-        premium: button('Продлить'),
-      };
+export function packAction(currentPlanId: PlanId, daysLeft: number): PlanCardAction {
+  if (currentPlanId === 'ai_pack') {
+    return { kind: 'note', text: `Пакет действует ещё ${daysLeft} ${pluralDays(daysLeft)}. Автопродления нет.` };
   }
+  return { kind: 'button', label: 'Подключить' };
 }
 
-/** Цена в рублях с пробелом между разрядами, как в эталоне: 0 ₽, 990 ₽, 4 990 ₽. */
+/** Услуги специалистов: цена и условия — рядом с решением (PDF «Новая модель 2.0»). */
+export interface ServiceOffer {
+  id: 'after_result' | 'stage_report';
+  name: string;
+  price: string;
+  priceNote: string;
+  description: string;
+  items: readonly string[];
+}
+
+export const SERVICES: readonly ServiceOffer[] = [
+  {
+    id: 'after_result',
+    name: 'Сопровождение после результата',
+    price: '5%',
+    priceNote: 'от полученного финансирования, максимум 50 000 ₽',
+    description: 'Согласованный объём сопровождения заявки по отдельному договору',
+    items: [
+      '0 ₽ до результата',
+      'Оплата — только после фактического поступления денег',
+      'Не из средств гранта: из собственных средств или от другого плательщика',
+      'Сумма, потолок и условия — в договоре до начала работы',
+    ],
+  },
+  {
+    id: 'stage_report',
+    name: 'Отчёт по этапу',
+    price: 'от 14 900 ₽',
+    priceNote: 'за один этап',
+    description: 'Когда грант получен и нужно отчитаться по этапу',
+    items: [
+      'Разбор договора: обязательства, сроки, подтверждения',
+      'До 30 первичных документов',
+      'Согласованный отчётный пакет одного этапа',
+      'Один сводный круг правок',
+      'Точная цена — после оценки объёма',
+    ],
+  },
+];
+
+/** Куда ведёт «Оставить заявку» на услугу: форма обращения. */
+export const SERVICE_REQUEST_PATH = '/support';
+
+/** Цена в рублях с пробелом между разрядами: 0 ₽, 499 ₽, 14 900 ₽. */
 export function formatRub(amount: number): string {
   return `${String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} ₽`;
 }

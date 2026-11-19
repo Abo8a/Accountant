@@ -4,25 +4,24 @@ import { describe, expect, it, vi } from 'vitest';
 import { PlansModal } from './PlansModal';
 
 describe('PlansModal', () => {
-  it('показывает три тарифа из админки: название, цена и описание', () => {
+  it('показывает тарифы, которые продаются: бесплатный и «Пакет ИИ», и как считаются кредиты', () => {
     render(<PlansModal onClose={() => {}} />);
 
     const dialog = screen.getByRole('dialog', { name: 'Тарифы' });
     expect(within(dialog).getByRole('heading', { level: 2, name: 'Тарифы' })).toBeInTheDocument();
 
     const items = within(dialog).getAllByRole('listitem');
-    expect(items).toHaveLength(3);
-    expect(within(items[0]).getByRole('heading', { level: 3, name: 'Базовый' })).toBeInTheDocument();
+    expect(items).toHaveLength(2);
+    expect(within(items[0]).getByRole('heading', { level: 3, name: 'Бесплатный' })).toBeInTheDocument();
     expect(items[0]).toHaveTextContent('0 ₽');
-    expect(items[0]).toHaveTextContent('Паспорт, анкета, стоп-факторы и экспорт. До 5 файлов, без проверки новизны.');
+    expect(items[0]).not.toHaveTextContent('за');
+    expect(items[0]).toHaveTextContent('До 5 файлов и 20 ИИ-кредитов один раз.');
 
-    expect(within(items[1]).getByRole('heading', { level: 3, name: 'Профессиональный' })).toBeInTheDocument();
-    expect(items[1]).toHaveTextContent('990 ₽');
-    expect(items[1]).toHaveTextContent('До 10 файлов, разбор документов ИИ и проверка новизны.');
+    expect(within(items[1]).getByRole('heading', { level: 3, name: 'Пакет ИИ' })).toBeInTheDocument();
+    expect(items[1]).toHaveTextContent('499 ₽ за 30 дней');
+    expect(items[1]).toHaveTextContent('60 ИИ-кредитов на 30 дней и до 10 файлов. Без автопродления.');
 
-    expect(within(items[2]).getByRole('heading', { level: 3, name: 'Премиум' })).toBeInTheDocument();
-    expect(items[2]).toHaveTextContent('4 990 ₽');
-    expect(items[2]).toHaveTextContent('До 50 файлов, разбор документов ИИ, проверка новизны и консультант.');
+    expect(within(dialog).getByText(/Технические ошибки кредиты не списывают/)).toBeInTheDocument();
   });
 
   it('при открытии фокус внутри окна', () => {
@@ -48,7 +47,7 @@ describe('PlansModal', () => {
     const onClose = vi.fn();
     const { container } = render(<PlansModal onClose={onClose} />);
 
-    await userEvent.click(screen.getByRole('heading', { level: 3, name: 'Премиум' }));
+    await userEvent.click(screen.getByRole('heading', { level: 3, name: 'Пакет ИИ' }));
     expect(onClose).not.toHaveBeenCalled();
 
     await userEvent.click(container.querySelector('.plans-modal__overlay') as HTMLElement);

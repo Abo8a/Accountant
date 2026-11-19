@@ -3,66 +3,55 @@ import { useCabinetState } from '../../shared/state/cabinet';
 import { fetchMe } from '../../shared/api/auth';
 import { useCabinetShell } from '../../shared/layout/CabinetLayout';
 import { DEFAULT_PLAN_ID, FLAGS } from '../../shared/config/flags';
+import { PillLink } from '../../shared/ui';
 import {
+  CREDITS_EXPLAINED,
+  FREE_AI_CREDITS,
+  SERVICES,
+  SERVICE_REQUEST_PATH,
   formatRub,
   getPlan,
-  planActions,
+  packAction,
+  planOrFree,
+  pluralCredits,
   pluralDays,
-  type PlanCardAction,
   type PlanId,
 } from '../../shared/data/plans';
 import { PlansModal } from './PlansModal';
 import './Billing.css';
 
-// Экран «Тариф и оплата» (F12). Эталон: design/project/Billing.dc.html, логика повторяет его renderVals().
-// Данные — демо-значения из эталона; подключение к billing_subscriptions / billing_payments — этап G5.
-// Пока нет платёжного шлюза (FLAGS.HIDE_PAYMENT_GATEWAY = TRUE): окно оплаты, баннеры результата,
-// строка нового платежа и кнопка оплаты не рендерятся; кнопки открывают окно «Тарифы».
-// Кнопки карточек по текущему тарифу — planActions() из shared/data/plans.ts (решение владельца, G3r2).
+// Экран «Тариф и оплата» (F12). Оболочка и классы — design/project/Billing.dc.html; содержание — монетизация v2:
+// бесплатный тариф (20 ИИ-кредитов один раз), «Пакет ИИ» (499 ₽ / 30 дней / 60 кредитов, без автопродления)
+// и услуги специалистов. Эталона под новую модель нет — решение владельца: «в текущем стиле».
+// Пока нет платёжного шлюза (FLAGS.HIDE_PAYMENT_GATEWAY = TRUE): окно оплаты, баннеры результата
+// и строка нового платежа не рендерятся; кнопка «Подключить» открывает окно «Тарифы».
 
-type PaidPlanId = 'pro' | 'premium';
 type PayResult = 'ok' | 'fail' | 'pending';
 
 export interface BillingProps {
-  /** Текущая подписка (живой режим — из состояния пользователя; по умолчанию — пример из макета). */
+  /** Текущий пакет (живой режим — из состояния пользователя; по умолчанию — пример). */
   subscription?: { validUntil: string; daysLeft: number; filesUsed: number; filesLimit: number };
+  /** ИИ-кредиты: остаток и из них платные (из «Пакета ИИ»). */
+  credits?: { balance: number; paidBalance: number };
   /** Почта для чека. */
   email?: string;
-  /** Показывать историю платежей (демо-строки из макета). В живом режиме платежей пока нет. */
+  /** Показывать историю платежей (демо-строки). В живом режиме платежей пока нет. */
   showHistory?: boolean;
-  /** Текущий тариф. По умолчанию — DEFAULT_PLAN_ID (премиум, решение владельца). free — подписка закончилась. */
+  /** Текущий тариф. По умолчанию — DEFAULT_PLAN_ID (бесплатный). */
   currentPlan?: PlanId;
 }
 
-const BASIC = {
-  name: 'Базовый',
-  description: getPlan('free').description,
-  price: '0 ₽',
-};
+const PACK = getPlan('ai_pack');
 
-// Значения окна оплаты из эталона (переход на тариф и продление). Используются только при FLAGS.HIDE_PAYMENT_GATEWAY = FALSE.
-const PAID_PLANS: Record<PaidPlanId, { name: string; base: string; discount: string; price: string }> = {
-  pro: { name: 'Профессиональный', base: '990 ₽', discount: '15%', price: '841 ₽' },
-  premium: { name: 'Премиум', base: '4 990 ₽', discount: '—', price: '4 990 ₽' },
-};
-
-// Демо-значения текущей подписки из эталона. daysLeft — оставшиеся дни (эталон: «осталось 23 дня»).
-const SUBSCRIPTION = {
-  validUntil: '1 декабря 2026',
-  daysLeft: 23,
-  filesUsed: 3,
-  // Лимит текущего тарифа (Премиум = 50), решение владельца: «3 из 50».
-  filesLimit: 50,
-};
+// Демо-значения для режима без бэкенда (витрина экранов).
+const SUBSCRIPTION = { validUntil: '1 декабря 2026', daysLeft: 23, filesUsed: 3, filesLimit: 5 };
+const CREDITS = { balance: 14, paidBalance: 0 };
 const PAID_UNTIL = '31 декабря 2026';
 const CHECKOUT_EMAIL = 'ivan@university.ru';
-// Демо-строки истории платежей из эталона (дата нового платежа — демо, в продукте — дата из billing_payments).
 const NEW_PAYMENT_DATE = '8 ноября 2026';
-const PREVIOUS_PAYMENT = { date: '1 ноября 2026', plan: 'Профессиональный', sum: '841 ₽', discount: '15%' };
+const PREVIOUS_PAYMENT = { date: '1 ноября 2026', plan: PACK.name, sum: formatRub(PACK.price_rub) };
 
-const PRO = getPlan('pro');
-
-/** Живой режим: тариф и срок подписки пользователя вместо примера из макета. */
+/** Живой режим: тариф, срок и ИИ-кредиты пользователя. */
 export function LiveBilling() {
   const state = useCabinetState();
   const [email, setEmail] = useState('');
@@ -74,9 +63,10 @@ export function LiveBilling() {
   const daysLeft = until ? Math.max(0, Math.ceil((until.getTime() - Date.now()) / 86_400_000)) : 0;
   return (
     <Billing
-      currentPlan={state.plan_id}
+      currentPlan={planOrFree(state.plan_id).id}
       email={email}
       showHistory={false}
+      credits={{ balance: state.ai_credits?.balance ?? 0, paidBalance: state.ai_credits?.paid_balance ?? 0 }}
       subscription={{
         validUntil: until ? until.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).replace(/\s*г\.$/, '') : '',
         daysLeft,
@@ -93,12 +83,26 @@ const PAY_STATUS: Record<PayResult, { label: string; chip: string }> = {
   pending: { label: 'Ожидает', chip: 'billing__chip--pending' },
 };
 
-export function Billing({ currentPlan = DEFAULT_PLAN_ID, subscription = SUBSCRIPTION, email = CHECKOUT_EMAIL, showHistory = true }: BillingProps = {}) {
+/** Подпись под названием тарифа: срок пакета или остаток бесплатных кредитов. */
+function heroSubtitle(plan: PlanId, subscription: NonNullable<BillingProps['subscription']>, credits: NonNullable<BillingProps['credits']>): string {
+  if (plan === 'free') {
+    return `Бесплатные ИИ-кредиты: осталось ${credits.balance} из ${FREE_AI_CREDITS}. Выдаются один раз.`;
+  }
+  const tail = plan === 'ai_pack' ? ' Автопродления нет.' : '';
+  return `Действует до ${subscription.validUntil} · осталось ${subscription.daysLeft} ${pluralDays(subscription.daysLeft)}.${tail}`;
+}
+
+export function Billing({
+  currentPlan = DEFAULT_PLAN_ID,
+  subscription = SUBSCRIPTION,
+  credits = CREDITS,
+  email = CHECKOUT_EMAIL,
+  showHistory = true,
+}: BillingProps = {}) {
   // Отступы main из эталона Billing.dc.html (36px 48px 64px); остальное — значения шелла по умолчанию.
   useCabinetShell({ mainPadding: 'var(--space-36) var(--space-48) var(--space-64)' });
 
   const titleId = useId();
-  const [chosen, setChosen] = useState<PaidPlanId>('pro');
   const [checkout, setCheckout] = useState(false);
   const [result, setResult] = useState<PayResult | null>(null);
   const [plansOpen, setPlansOpen] = useState(false);
@@ -108,36 +112,16 @@ export function Billing({ currentPlan = DEFAULT_PLAN_ID, subscription = SUBSCRIP
   const checkoutOpen = paymentEnabled && checkout;
   const payResult = paymentEnabled ? result : null;
 
-  const isFree = currentPlan === 'free';
-  const currentPlanName = getPlan(currentPlan).name;
-  const actions = planActions(currentPlan, subscription.daysLeft);
-
-  const chosenPlan = PAID_PLANS[chosen];
-
-  const openCheckout = (plan: PaidPlanId) => {
-    setChosen(plan);
-    setCheckout(true);
-  };
+  const plan = getPlan(currentPlan);
+  const action = packAction(currentPlan, subscription.daysLeft);
 
   const pay = (next: PayResult) => {
     setCheckout(false);
     setResult(next);
   };
 
-  // Кнопка карточки: при включённом шлюзе — оплата выбранного тарифа, пока шлюза нет — окно «Тарифы».
-  const onCardButton = (plan: PaidPlanId) => (paymentEnabled ? openCheckout(plan) : setPlansOpen(true));
-
-  const renderCardAction = (action: PlanCardAction, plan: PaidPlanId) => {
-    if (action.kind === 'note') return <span className="billing__plan-note">{action.text}</span>;
-    if (action.kind === 'button') {
-      return (
-        <button type="button" className="billing__plan-buy" onClick={() => onCardButton(plan)}>
-          {action.label}
-        </button>
-      );
-    }
-    return null;
-  };
+  // При включённом шлюзе — оплата пакета, пока шлюза нет — окно «Тарифы».
+  const onConnect = () => (paymentEnabled ? setCheckout(true) : setPlansOpen(true));
 
   return (
     <div className="billing">
@@ -154,7 +138,7 @@ export function Billing({ currentPlan = DEFAULT_PLAN_ID, subscription = SUBSCRIP
             <path d="M5 12l5 5 9-10" />
           </svg>
           <span className="billing__banner-text">
-            <b className="billing__banner-strong">Оплата прошла.</b> {chosenPlan.name} действует до {PAID_UNTIL}.
+            <b className="billing__banner-strong">Оплата прошла.</b> {PACK.name} действует до {PAID_UNTIL}.
           </span>
           <button type="button" className="billing__banner-action" onClick={() => setResult(null)}>
             Закрыть
@@ -201,107 +185,109 @@ export function Billing({ currentPlan = DEFAULT_PLAN_ID, subscription = SUBSCRIP
       <section className="billing__hero">
         <div className="billing__hero-main">
           <span className="billing__caption">Текущий тариф</span>
-          <h2 className="billing__hero-title">{currentPlanName}</h2>
+          <h2 className="billing__hero-title">{plan.name}</h2>
+          <span className="billing__hero-sub">{heroSubtitle(currentPlan, subscription, credits)}</span>
+        </div>
+        <div className="billing__credits">
+          <span className="billing__caption">ИИ-кредиты</span>
+          <span className="billing__credits-value">{credits.balance}</span>
           <span className="billing__hero-sub">
-            {isFree
-              ? BASIC.description
-              : `Действует до ${subscription.validUntil} · осталось ${subscription.daysLeft} ${pluralDays(subscription.daysLeft)}`}
+            {credits.paidBalance > 0
+              ? `из них ${credits.paidBalance} ${pluralCredits(credits.paidBalance)} пакета`
+              : `${pluralCredits(credits.balance)} осталось`}
           </span>
         </div>
-        {!isFree && (
-          <>
-            <button
-              type="button"
-              className="billing__renew"
-              onClick={() => (paymentEnabled ? openCheckout('pro') : setPlansOpen(true))}
-            >
-              Продлить
-            </button>
-          </>
-        )}
+      </section>
+
+      <p className="billing__plan-desc">{CREDITS_EXPLAINED}</p>
+
+      <section className="billing__section">
+        <h2 className="billing__section-title">Больше работы ИИ</h2>
+        <div className="billing__plans">
+          <div className="billing__plan">
+            <h3 className="billing__plan-name">{PACK.name}</h3>
+            <p className="billing__plan-desc">{PACK.description}</p>
+            <p className="billing__plan-price">
+              {formatRub(PACK.price_rub)} <span className="billing__plan-price-unit">за {PACK.duration_days} {pluralDays(PACK.duration_days)}</span>
+            </p>
+            {action.kind === 'note' ? (
+              <span className="billing__plan-note">{action.text}</span>
+            ) : (
+              <button type="button" className="billing__plan-buy" onClick={onConnect}>
+                {action.label}
+              </button>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="billing__section">
-        <h2 className="billing__section-title">Другие тарифы</h2>
+        <h2 className="billing__section-title">Услуги специалистов</h2>
         <div className="billing__plans">
-          {actions.free.kind !== 'hidden' && (
-            <div className="billing__plan">
-              <h3 className="billing__plan-name">{BASIC.name}</h3>
-              <p className="billing__plan-desc">{BASIC.description}</p>
-              <p className="billing__plan-price">{BASIC.price}</p>
-              {actions.free.kind === 'note' && <span className="billing__plan-note">{actions.free.text}</span>}
+          {SERVICES.map((service) => (
+            <div key={service.id} className="billing__plan">
+              <h3 className="billing__plan-name">{service.name}</h3>
+              <p className="billing__plan-desc">{service.description}</p>
+              <p className="billing__plan-price">
+                {service.price} <span className="billing__plan-price-unit">{service.priceNote}</span>
+              </p>
+              <PillLink to={SERVICE_REQUEST_PATH} variant="outline" size="sm">
+                Оставить заявку
+              </PillLink>
             </div>
-          )}
-          <div className="billing__plan">
-            <h3 className="billing__plan-name">{PRO.name}</h3>
-            <p className="billing__plan-desc">{PRO.description}</p>
-            <p className="billing__plan-price">
-              {formatRub(PRO.price_rub)} <span className="billing__plan-price-unit">за {PRO.duration_days} {pluralDays(PRO.duration_days)}</span>
-            </p>
-            {renderCardAction(actions.pro, 'pro')}
-          </div>
-          <div className="billing__plan">
-            <h3 className="billing__plan-name">Премиум</h3>
-            <p className="billing__plan-desc">До 50 файлов и консультант.</p>
-            <p className="billing__plan-price">
-              4 990 ₽ <span className="billing__plan-price-unit">за 30 дней</span>
-            </p>
-            {renderCardAction(actions.premium, 'premium')}
-          </div>
+          ))}
         </div>
+        <p className="billing__plan-note">Услуги оформляются отдельным договором и выбираются по желанию. Отказ от них не закрывает доступ к паспорту и материалам.</p>
       </section>
 
       {showHistory && (
-      <section className="billing__section">
-        <h2 className="billing__section-title">История платежей</h2>
-        <div className="billing__table-wrap">
-          <table className="billing__table">
-            <thead>
-              <tr>
-                <th scope="col">Дата</th>
-                <th scope="col">Тариф</th>
-                <th scope="col">Сумма</th>
-                <th scope="col">Скидка</th>
-                <th scope="col">Статус</th>
-                <th scope="col">Чек</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payResult && (
+        <section className="billing__section">
+          <h2 className="billing__section-title">История платежей</h2>
+          <div className="billing__table-wrap">
+            <table className="billing__table">
+              <thead>
                 <tr>
-                  <td>{NEW_PAYMENT_DATE}</td>
-                  <td>{chosenPlan.name}</td>
-                  <td>{chosenPlan.price}</td>
-                  <td>{chosenPlan.discount}</td>
-                  <td>
-                    <span className={`billing__chip ${PAY_STATUS[payResult].chip}`}>{PAY_STATUS[payResult].label}</span>
-                  </td>
-                  <td className="billing__muted">—</td>
+                  <th scope="col">Дата</th>
+                  <th scope="col">Тариф</th>
+                  <th scope="col">Сумма</th>
+                  <th scope="col">Статус</th>
+                  <th scope="col">Чек</th>
                 </tr>
-              )}
-              <tr>
-                <td>{PREVIOUS_PAYMENT.date}</td>
-                <td>{PREVIOUS_PAYMENT.plan}</td>
-                <td>{PREVIOUS_PAYMENT.sum}</td>
-                <td>{PREVIOUS_PAYMENT.discount}</td>
-                <td>
-                  <span className="billing__chip billing__chip--ok">Оплачен</span>
-                </td>
-                <td>
-                  <a href="#">Открыть</a>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {payResult && (
+                  <tr>
+                    <td>{NEW_PAYMENT_DATE}</td>
+                    <td>{PACK.name}</td>
+                    <td>{formatRub(PACK.price_rub)}</td>
+                    <td>
+                      <span className={`billing__chip ${PAY_STATUS[payResult].chip}`}>{PAY_STATUS[payResult].label}</span>
+                    </td>
+                    <td className="billing__muted">—</td>
+                  </tr>
+                )}
+                <tr>
+                  <td>{PREVIOUS_PAYMENT.date}</td>
+                  <td>{PREVIOUS_PAYMENT.plan}</td>
+                  <td>{PREVIOUS_PAYMENT.sum}</td>
+                  <td>
+                    <span className="billing__chip billing__chip--ok">Оплачен</span>
+                  </td>
+                  <td>
+                    <a href="#">Открыть</a>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       {checkoutOpen && (
         <div className="billing__overlay">
           <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="billing__dialog">
             <div className="billing__dialog-head">
-              <h2 id={titleId} className="billing__dialog-title">Оплата тарифа</h2>
+              <h2 id={titleId} className="billing__dialog-title">Оплата пакета</h2>
               <button type="button" aria-label="Закрыть" className="billing__close" onClick={() => setCheckout(false)}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#17171C" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                   <path d="M6 6l12 12M18 6L6 18" />
@@ -310,15 +296,15 @@ export function Billing({ currentPlan = DEFAULT_PLAN_ID, subscription = SUBSCRIP
             </div>
             <dl className="billing__summary">
               <dt>Тариф</dt>
-              <dd className="billing__summary-strong">{chosenPlan.name}</dd>
+              <dd className="billing__summary-strong">{PACK.name}</dd>
               <dt>Период</dt>
-              <dd>30 дней</dd>
-              <dt>Цена</dt>
-              <dd>{chosenPlan.base}</dd>
-              <dt>Скидка за продление</dt>
-              <dd>{chosenPlan.discount}</dd>
+              <dd>
+                {PACK.duration_days} {pluralDays(PACK.duration_days)}
+              </dd>
+              <dt>ИИ-кредиты</dt>
+              <dd>{PACK.ai_credits}</dd>
               <dt className="billing__total-label">К оплате</dt>
-              <dd className="billing__total-value">{chosenPlan.price}</dd>
+              <dd className="billing__total-value">{formatRub(PACK.price_rub)}</dd>
             </dl>
             <p className="billing__legal">
               Вы перейдёте на защищённую страницу ЮKassa. Автопродления нет. Чек придёт на {email}.

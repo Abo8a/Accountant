@@ -193,7 +193,7 @@ export async function noveltyAndFinalize(
       );
     }
   } else {
-    extraChecklist.push('Проверка научно-технической новизны недоступна на базовом тарифе.');
+    extraChecklist.push('Проверка научно-технической новизны недоступна на вашем тарифе.');
   }
 
   return finalize(deps, ctx, projectId, records, program, warnings, extraChecklist, auditReport);

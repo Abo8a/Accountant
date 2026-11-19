@@ -101,7 +101,7 @@ describe('AdminUsers: рендер', () => {
   it('показывает заданные данные из подменённого API, а не демо-список', async () => {
     const single: AdminUser = {
       id: 'x1', name: 'Тест Тестов', email: 'test@example.ru', project: 'Проект', status: 'draft',
-      plan: 'Базовый', created: '01.01.2026', createdAt: '2026-01-01T00:00', banEventAt: null, grantEventAt: null,
+      plan: 'Бесплатный', created: '01.01.2026', createdAt: '2026-01-01T00:00', banEventAt: null, grantEventAt: null,
       anchor: '—', files: '0 из 0', guard: 'нет событий',
       guardBlocks7d: 0, paid: false, role: 'user', banned: false,
     };
@@ -193,7 +193,7 @@ describe('AdminUsers: карточка пользователя', () => {
     expect(within(card()).getByText('anna@example.ru')).toBeInTheDocument();
     expect(within(card()).getByText('Молодёжь рядом')).toBeInTheDocument();
     expect(within(card()).getByText('готов · gpt-4o-mini')).toBeInTheDocument();
-    expect(within(card()).getByText('Базовый')).toBeInTheDocument();
+    expect(within(card()).getByText('Бесплатный')).toBeInTheDocument();
     expect(rowOf('Анна Смирнова')).toHaveClass('users__row--selected');
     expect(rowOf('Иван Иванов')).not.toHaveClass('users__row--selected');
   });
@@ -347,36 +347,35 @@ describe('AdminUsers: выдача подписки вручную', () => {
     await waitForRows();
 
     await user.click(screen.getByRole('button', { name: /Анна Смирнова/ }));
-    await user.selectOptions(within(card()).getByRole('combobox'), 'Премиум');
+    await user.selectOptions(within(card()).getByRole('combobox'), 'Пакет ИИ');
     await user.click(within(card()).getByRole('button', { name: 'Выдать' }));
 
     const confirm = within(card()).getByRole('group', { name: 'Подтверждение выдачи' });
-    expect(confirm).toHaveTextContent('Выдать «Премиум» на 30 дней вручную?');
+    expect(confirm).toHaveTextContent('Выдать «Пакет ИИ» на 30 дней вручную?');
     expect(grant).not.toHaveBeenCalled();
-    expect(rowOf('Анна Смирнова')).toHaveTextContent('Базовый');
+    expect(rowOf('Анна Смирнова')).toHaveTextContent('Бесплатный');
 
     await user.click(within(confirm).getByRole('button', { name: 'Подтвердить' }));
-    expect(grant).toHaveBeenCalledWith('u2', { planId: 'premium', days: 30 });
+    expect(grant).toHaveBeenCalledWith('u2', { planId: 'ai_pack', days: 30 });
 
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Выдано. Платёж записан как «вручную», событие — в журнале.',
     );
-    expect(rowOf('Анна Смирнова').querySelectorAll('td')[3]).toHaveTextContent('Премиум до 12.12');
+    expect(rowOf('Анна Смирнова').querySelectorAll('td')[3]).toHaveTextContent('Пакет ИИ до 12.12');
     expect(within(card()).getByText('Выдана подписка')).toBeInTheDocument();
   });
 
-  it('«Выдать» по умолчанию предлагает «Профессиональный» на 30 дней', async () => {
+  it('«Выдать» предлагает только «Пакет ИИ» на 30 дней — старые тарифы не выдаются', async () => {
     const user = userEvent.setup();
     renderScreen();
     await waitForRows();
-    expect(within(card()).getByRole('combobox')).toHaveValue('pro');
+    expect(within(card()).getByRole('combobox')).toHaveValue('ai_pack');
     expect(within(card()).getByRole('spinbutton')).toHaveValue(30);
-    expect(within(card()).getByRole('option', { name: 'Профессиональный' })).toBeInTheDocument();
-    expect(within(card()).getByRole('option', { name: 'Премиум' })).toBeInTheDocument();
+    expect(within(card()).getAllByRole('option').map((o) => o.textContent)).toEqual(['Пакет ИИ']);
 
     await user.click(within(card()).getByRole('button', { name: 'Выдать' }));
     expect(within(card()).getByRole('group', { name: 'Подтверждение выдачи' })).toHaveTextContent(
-      'Выдать «Профессиональный» на 30 дней вручную?',
+      'Выдать «Пакет ИИ» на 30 дней вручную?',
     );
   });
 

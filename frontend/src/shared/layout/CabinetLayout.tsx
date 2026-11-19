@@ -12,7 +12,7 @@ import './CabinetLayout.css';
 /** Пока состояние грузится, в живом режиме не показываем пример из макета (чужой проект, «Профессиональный»). */
 const LOADING_SHELL = {
   project: { name: '', program: 'Студенческий стартап' },
-  plan: { name: '', validUntil: '', files: '', fillPercent: 0 },
+  plan: { name: '', validUntil: '', files: '', credits: '', fillPercent: 0 },
   user: { name: '', initials: '' },
   gapsCount: null,
 };
@@ -39,6 +39,8 @@ export interface CabinetPlan {
   name: string;
   validUntil: string;
   files: string;
+  /** Остаток ИИ-кредитов («ИИ-кредиты: 18»); пусто — строка не выводится. */
+  credits?: string;
   /** Заполнение полоски, проценты 0–100. */
   fillPercent: number;
 }
@@ -172,6 +174,7 @@ export function CabinetLayout({
           <div className="cabinet__card cabinet__plan">
             <span className="cabinet__plan-name">{pl.name}</span>
             <span className="cabinet__meta">{pl.validUntil}</span>
+            {pl.credits && <span className="cabinet__meta">{pl.credits}</span>}
             <span className="cabinet__meta">{pl.files}</span>
             <span className="cabinet__bar" aria-hidden="true">
               <span className="cabinet__bar-fill" style={{ width: `${pl.fillPercent}%` }} />

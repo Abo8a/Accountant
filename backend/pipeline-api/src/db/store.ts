@@ -19,8 +19,37 @@ export interface UserContext {
   features: { ai_parsing?: boolean; novelty_check?: boolean; consultant?: boolean };
   fileUploadsLimit: number;
   uploadedFilesCount: number;
+  /** ИИ-кредиты: остаток действующих пачек и стоимость действий (app_settings.ai_credit_costs). */
+  aiCredits: AiCredits;
   thresholds: { block: number; warn: number };
   project: ProjectInfo | null;
+}
+
+export interface AiCreditCosts {
+  /** Шаг с ИИ: бриф, ответ на вопрос с разбором. */
+  ai_step: number;
+  /** Разбор одного загруженного файла. */
+  file: number;
+  /** Одно сообщение консультанту. */
+  consultant_message: number;
+}
+
+export interface AiCredits {
+  balance: number;
+  /** Кредиты из платного пакета и срок самой ранней действующей пачки (null — платных нет). */
+  paid_balance: number;
+  paid_expires_at: string | null;
+  costs: AiCreditCosts;
+}
+
+export const DEFAULT_AI_CREDIT_COSTS: AiCreditCosts = { ai_step: 1, file: 2, consultant_message: 1 };
+
+export function normalizeCreditCosts(raw: Record<string, unknown> | null | undefined): AiCreditCosts {
+  const pick = (key: keyof AiCreditCosts) => {
+    const n = Number(raw?.[key]);
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : DEFAULT_AI_CREDIT_COSTS[key];
+  };
+  return { ai_step: pick('ai_step'), file: pick('file'), consultant_message: pick('consultant_message') };
 }
 
 export interface StudyCertificateMeta {
@@ -139,7 +168,15 @@ SELECT p.founder_data, p.is_banned,
        (pr.anchor_status = 'ready' AND pr.anchor_embedding IS NOT NULL) AS anchor_ready,
        EXISTS (SELECT 1 FROM project_passport_records prr WHERE prr.project_id = pr.id) AS has_records,
        st.guard_threshold_block,
-       st.guard_threshold_warn
+       st.guard_threshold_warn,
+       st.ai_credit_costs,
+       public.ai_credits_balance(p.id)               AS credits_balance,
+       (SELECT COALESCE(SUM(g.amount - g.used), 0)::int
+          FROM billing_credit_grants g
+         WHERE g.user_id = p.id AND g.expires_at IS NOT NULL AND g.expires_at > now()) AS credits_paid_balance,
+       (SELECT MIN(g.expires_at)
+          FROM billing_credit_grants g
+         WHERE g.user_id = p.id AND g.expires_at IS NOT NULL AND g.expires_at > now() AND g.used < g.amount) AS credits_paid_expires_at
 FROM app_profiles p
 LEFT JOIN LATERAL (
     SELECT bs.plan_id, bs.expires_at
@@ -169,6 +206,12 @@ export class PassportStore {
       features: r.features ?? {},
       fileUploadsLimit: Number(r.file_uploads_limit),
       uploadedFilesCount: Number(r.uploaded_count),
+      aiCredits: {
+        balance: Number(r.credits_balance ?? 0),
+        paid_balance: Number(r.credits_paid_balance ?? 0),
+        paid_expires_at: r.credits_paid_expires_at ? new Date(r.credits_paid_expires_at).toISOString() : null,
+        costs: normalizeCreditCosts(r.ai_credit_costs),
+      },
       thresholds: { block: Number(r.guard_threshold_block), warn: Number(r.guard_threshold_warn) },
       project: r.project_id
         ? {
@@ -182,6 +225,13 @@ export class PassportStore {
           }
         : null,
     };
+  }
+
+  /** Списывает ИИ-кредиты после успешного действия (не уходит в минус). Возвращает фактически списанное. */
+  async spendAiCredits(userId: string, amount: number, action: string): Promise<number> {
+    if (amount <= 0) return 0;
+    const { rows } = await this.sql.query(`SELECT public.spend_ai_credits($1::uuid, $2::int, $3) AS spent`, [userId, amount, action]);
+    return Number(rows[0]?.spent ?? 0);
   }
 
   /** Создаёт проект пользователя (1 юзер = 1 проект) или возвращает существующий. */

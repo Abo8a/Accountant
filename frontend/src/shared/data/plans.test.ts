@@ -1,44 +1,65 @@
 import { describe, expect, it } from 'vitest';
-import { AUTO_RESTORE_NOTE, formatRub, planActions, pluralDays, type PlanCardAction } from './plans';
+import {
+  FREE_AI_CREDITS,
+  PACK_AI_CREDITS,
+  PLANS,
+  SERVICES,
+  formatRub,
+  getPlan,
+  packAction,
+  planOrFree,
+  pluralCredits,
+  pluralDays,
+} from './plans';
 
-describe('planActions: кнопки карточек по текущему тарифу', () => {
-  it('текущий «Базовый» (free): Профессиональный и Премиум — «Улучшить», карточка Базовый не выводится', () => {
-    expect(planActions('free', 23)).toEqual({
-      free: { kind: 'hidden' },
-      pro: { kind: 'button', label: 'Улучшить' },
-      premium: { kind: 'button', label: 'Улучшить' },
-    });
+describe('тарифы (монетизация v2)', () => {
+  it('продаются только бесплатный и «Пакет ИИ»', () => {
+    expect(PLANS.map((p) => [p.id, p.price_rub, p.ai_credits, p.file_uploads_limit])).toEqual([
+      ['free', 0, FREE_AI_CREDITS, 5],
+      ['ai_pack', 499, PACK_AI_CREDITS, 10],
+    ]);
+    expect(FREE_AI_CREDITS).toBe(20);
+    expect(PACK_AI_CREDITS).toBe(60);
+    expect(getPlan('ai_pack').duration_days).toBe(30);
   });
 
-  it('текущий «Профессиональный» (pro): Профессиональный — «Продлить», Премиум — «Улучшить», Базовый — текст без действия', () => {
-    expect(planActions('pro', 23)).toEqual({
-      free: { kind: 'note', text: AUTO_RESTORE_NOTE },
-      pro: { kind: 'button', label: 'Продлить' },
-      premium: { kind: 'button', label: 'Улучшить' },
-    });
+  it('старые тарифы находятся по id, но не продаются', () => {
+    expect(getPlan('premium')).toMatchObject({ name: 'Премиум', is_active: false });
+    expect(planOrFree('pro').name).toBe('Профессиональный');
+    expect(planOrFree('unknown').id).toBe('free');
   });
 
-  it('текущий «Премиум» (premium): Базовый — текст про возврат через N дней, Профессиональный — «Перейти на Pro», Премиум — «Продлить»', () => {
-    expect(planActions('premium', 23)).toEqual({
-      free: { kind: 'note', text: 'Вы вернётесь на данный тариф через 23 дня' },
-      pro: { kind: 'button', label: 'Перейти на Pro' },
-      premium: { kind: 'button', label: 'Продлить' },
-    });
+  it('услуги: 5% с потолком 50 000 ₽ и отчёт по этапу от 14 900 ₽', () => {
+    expect(SERVICES.map((s) => [s.name, s.price, s.priceNote])).toEqual([
+      ['Сопровождение после результата', '5%', 'от полученного финансирования, максимум 50 000 ₽'],
+      ['Отчёт по этапу', 'от 14 900 ₽', 'за один этап'],
+    ]);
+  });
+});
+
+describe('packAction: карточка «Пакет ИИ» в кабинете', () => {
+  it('без пакета — кнопка «Подключить» без суммы', () => {
+    expect(packAction('free', 0)).toEqual({ kind: 'button', label: 'Подключить' });
+    expect(packAction('premium', 10)).toEqual({ kind: 'button', label: 'Подключить' });
   });
 
-  it('N берётся из параметра, а не захардкожен: 5 дней и 1 день', () => {
-    const text = (action: PlanCardAction) => (action.kind === 'note' ? action.text : '');
-    expect(text(planActions('premium', 5).free)).toBe('Вы вернётесь на данный тариф через 5 дней');
-    expect(text(planActions('premium', 1).free)).toBe('Вы вернётесь на данный тариф через 1 день');
+  it('с пакетом — срок и «Автопродления нет»', () => {
+    expect(packAction('ai_pack', 5)).toEqual({ kind: 'note', text: 'Пакет действует ещё 5 дней. Автопродления нет.' });
+    expect(packAction('ai_pack', 1)).toEqual({ kind: 'note', text: 'Пакет действует ещё 1 день. Автопродления нет.' });
   });
+});
 
-  it('ни у одного текущего тарифа кнопок с суммой нет', () => {
-    for (const current of ['free', 'pro', 'premium'] as const) {
-      const actions = planActions(current, 23);
-      for (const action of Object.values(actions)) {
-        if (action.kind === 'button') expect(action.label).not.toMatch(/₽|\d/);
-      }
-    }
+describe('pluralCredits', () => {
+  it.each([
+    [1, 'кредит'],
+    [2, 'кредита'],
+    [5, 'кредитов'],
+    [11, 'кредитов'],
+    [20, 'кредитов'],
+    [21, 'кредит'],
+    [60, 'кредитов'],
+  ])('%i → %s', (count, word) => {
+    expect(pluralCredits(count)).toBe(word);
   });
 });
 
@@ -64,7 +85,7 @@ describe('pluralDays: склонение «день»', () => {
 describe('formatRub', () => {
   it('разряды пробелом, как в эталоне', () => {
     expect(formatRub(0)).toBe('0 ₽');
-    expect(formatRub(990)).toBe('990 ₽');
-    expect(formatRub(4990)).toBe('4 990 ₽');
+    expect(formatRub(499)).toBe('499 ₽');
+    expect(formatRub(14900)).toBe('14 900 ₽');
   });
 });

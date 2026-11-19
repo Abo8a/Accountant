@@ -34,16 +34,17 @@ describe('миграции и триггеры ТЗ v1.8', () => {
     expect(rows[0].founder_data.name).toBe('Тест');
   });
 
-  it('seed тарифов: «Базовый» — до 5 файлов и разбор документов, «Профессиональный» — 10, «Премиум» — 50', async () => {
+  it('seed тарифов (монетизация v2): бесплатный — 20 кредитов, «Пакет ИИ» — 499 ₽ и 60 кредитов, старые подписки не продаются', async () => {
     const { rows } = await db.sql.query(
-      `SELECT id, file_uploads_limit, features FROM billing_plans ORDER BY file_uploads_limit`,
+      `SELECT id, price_rub, file_uploads_limit, ai_credits, is_active, features FROM billing_plans ORDER BY price_rub`,
     );
-    expect(rows.map((r) => [r.id, r.file_uploads_limit, r.features.ai_parsing])).toEqual([
-      ['free', 5, true],
-      ['pro', 10, true],
-      ['premium', 50, true],
+    expect(rows.map((r) => [r.id, r.price_rub, r.file_uploads_limit, r.ai_credits, r.is_active])).toEqual([
+      ['free', 0, 5, 20, true],
+      ['ai_pack', 499, 10, 60, true],
+      ['pro', 990, 10, 0, false],
+      ['premium', 4990, 50, 0, false],
     ]);
-    expect(rows[0].features.novelty_check).toBe(false);
+    expect(rows[0].features).toEqual({ ai_parsing: true, novelty_check: true, consultant: true });
   });
 
   it('миграция 0012: переводит старый free (0 файлов) на 5 один раз и не перезаписывает правки админа', async () => {
@@ -58,7 +59,7 @@ describe('миграции и триггеры ТЗ v1.8', () => {
       await db.sql.query(`DELETE FROM app_data_migrations WHERE name = '0012_free_plan_uploads'`);
 
       await db.sql.exec(migration);
-      expect(await free()).toMatchObject({ n: 5, features: { ai_parsing: true, novelty_check: false } });
+      expect(await free()).toMatchObject({ n: 5, features: { ai_parsing: true } });
 
       // Админ снова выключил загрузку; следующий деплой повторно прогоняет миграцию — она ничего не меняет.
       await db.sql.query(

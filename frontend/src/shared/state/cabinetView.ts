@@ -1,6 +1,6 @@
 import type { PipelinePassportField } from '@passport/contracts';
 import type { CabinetState } from '../api/cabinet';
-import { PLANS } from '../data/plans';
+import { planOrFree } from '../data/plans';
 
 // Данные шапки и меню кабинета из состояния пользователя (живой режим). Чистые функции — их проверяют тесты.
 
@@ -41,7 +41,7 @@ export function userBadge(fullName: string | undefined): { name: string; initial
 }
 
 export function liveShell(state: CabinetState) {
-  const plan = PLANS.find((p) => p.id === state.plan_id) ?? PLANS[0]!;
+  const plan = planOrFree(state.plan_id);
   const limit = state.files_limit;
   return {
     project: { name: projectTitle(state.passport), program: 'Студенческий стартап' },
@@ -49,6 +49,7 @@ export function liveShell(state: CabinetState) {
       name: plan.name,
       validUntil: formatPlanUntil(state.plan_expires_at),
       files: `Файлы: ${state.files_used} из ${limit}`,
+      credits: state.ai_credits ? `ИИ-кредиты: ${state.ai_credits.balance}` : '',
       fillPercent: limit > 0 ? Math.min(100, Math.round((state.files_used / limit) * 100)) : 0,
     },
     user: userBadge(state.founder.full_name),

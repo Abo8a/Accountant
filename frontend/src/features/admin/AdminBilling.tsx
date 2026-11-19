@@ -15,7 +15,7 @@ import './AdminBilling.css';
 
 type Tab = 'pay' | 'plans';
 type StatusFilter = 'all' | PaymentStatus;
-type NumericPlanKey = 'price_rub' | 'duration_days' | 'file_uploads_limit' | 'renewal_discount_percent';
+type NumericPlanKey = 'price_rub' | 'duration_days' | 'file_uploads_limit' | 'ai_credits';
 
 export interface AdminBillingProps {
   service?: AdminBillingService;
@@ -41,7 +41,7 @@ const PLAN_NUMBER_FIELDS: { key: NumericPlanKey; label: string; max?: number }[]
   { key: 'price_rub', label: 'Цена, ₽' },
   { key: 'duration_days', label: 'Дней' },
   { key: 'file_uploads_limit', label: 'Лимит файлов' },
-  { key: 'renewal_discount_percent', label: 'Скидка продления, %', max: 100 },
+  { key: 'ai_credits', label: 'ИИ-кредиты' },
 ];
 
 const PLAN_FEATURE_FIELDS: { key: keyof PlanFeatures; label: string }[] = [

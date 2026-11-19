@@ -31,7 +31,7 @@ import './Files.css';
 
 export interface FilesProps {
   api?: FilesApi;
-  /** Тариф проекта. По умолчанию «Профессиональный» — как в эталоне (10 файлов). */
+  /** Тариф проекта. По умолчанию — DEFAULT_PLAN_ID (бесплатный, 5 файлов). */
   plan?: FilesPlanId;
   /**
    * Доступна ли загрузка документов (функция ai_parsing тарифа). По умолчанию — planFeatures() из flags.ts.
@@ -68,12 +68,14 @@ interface Toast {
 
 const ACCEPT = '.pdf,.docx,.pptx,.png,.jpg,.jpeg,.tif,.tiff';
 
-// Тексты окон 402 и BLOCKED_PROJECT_SWAP взяты из States.dc.html; на экране материалов они выводятся тостом.
-const PAYWALL_TEXT =
-  'Загрузка документов — на платном тарифе. На Базовом тарифе паспорт собирается по анкете. Чтобы разобрать презентацию и привязать факты к страницам, подключите «Профессиональный».';
-const PAYWALL_TITLE = 'Загрузка документов — на платном тарифе';
+// Тексты окна BLOCKED_PROJECT_SWAP взяты из States.dc.html. Тексты 402 переписаны под монетизацию v2: загрузка есть
+// на всех тарифах, 402 бывает, только если админ выключил разбор документов на тарифе.
+const PAYWALL_TITLE = 'Загрузка документов выключена на вашем тарифе';
 const PAYWALL_BODY =
-  'На Базовом тарифе паспорт собирается по анкете. Чтобы разобрать презентацию и привязать факты к страницам, подключите «Профессиональный».';
+  'Паспорт можно собрать по анкете. Чтобы разобрать презентацию и привязать факты к страницам, посмотрите тарифы.';
+const PAYWALL_TEXT = `${PAYWALL_TITLE}. ${PAYWALL_BODY}`;
+/** Тариф, на который предлагаем перейти, когда файлов не хватает. */
+const UPGRADE_PLAN = 'ai_pack' as const;
 const SWAP_TITLE = 'Похоже, это материалы другого проекта';
 // Текст инлайн-карточки придуман для экрана (короткий, на «вы»), в эталоне Files его нет.
 const SWAP_BODY = 'Файл не сохранён: один аккаунт — один проект. Если это ошибка, напишите в поддержку.';
@@ -92,7 +94,8 @@ function toastForOutcome(status: UploadStatus, name: string, message?: string): 
     case 'FILE_QUOTA_EXCEEDED':
       return {
         tone: 'danger',
-        text: 'Лимит файлов исчерпан. Удалите ненужный файл или перейдите на «Премиум».',
+        text: 'Лимит файлов исчерпан. Удалите ненужный файл — повторно загруженные копии в лимит не считаются.',
+        link: { label: 'Тарифы', to: '/billing' },
       };
     case 'PLAN_UPGRADE_REQUIRED':
       return { tone: 'warning', text: PAYWALL_TEXT, link: { label: 'Тарифы', to: '/billing' } };
@@ -127,6 +130,9 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
 
   const planData = filesPlan(plan);
   const fileLimit = planData.file_uploads_limit;
+  // Предлагаем «Пакет ИИ», только если в нём файлов больше, чем на текущем тарифе.
+  const upgradePlan = filesPlan(UPGRADE_PLAN);
+  const canUpgrade = upgradePlan.file_uploads_limit > fileLimit;
   const canUpload = aiParsingEnabled ?? planFeatures(planData.features).ai_parsing;
 
   const [files, setFiles] = useState<ProjectFile[]>(initialFiles ?? SEED_FILES);
@@ -309,11 +315,11 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
         <Notice
           tone="warning"
           title={`Лимит файлов исчерпан: ${fileLimit} из ${fileLimit}`}
-          action={plan === 'premium' ? undefined : { label: 'Тарифы', to: '/billing' }}
+          action={canUpgrade ? { label: 'Тарифы', to: '/billing' } : undefined}
         >
-          {plan === 'premium'
-            ? 'Чтобы добавить новый файл, удалите ненужный. Повторно загруженные копии в лимит не считаются.'
-            : `Чтобы добавить новый файл, удалите ненужный или подключите «Премиум»: там до ${filesPlan('premium').file_uploads_limit} файлов. Повторно загруженные копии в лимит не считаются.`}
+          {canUpgrade
+            ? `Чтобы добавить новый файл, удалите ненужный или подключите «${upgradePlan.name}»: там до ${upgradePlan.file_uploads_limit} файлов. Повторно загруженные копии в лимит не считаются.`
+            : 'Чтобы добавить новый файл, удалите ненужный. Повторно загруженные копии в лимит не считаются.'}
         </Notice>
       )}
 
@@ -345,9 +351,9 @@ export function Files({ api = localFilesApi, plan = DEFAULT_PLAN_ID, aiParsingEn
         <div className="files__plan-card">
           <span className="files__plan-name">Тариф «{planData.name}»</span>
           <span className="files__plan-text">PDF, DOCX, PPTX, сканы · до 25 МБ на файл. Дубли не занимают место в лимите.</span>
-          {plan !== 'premium' && (
+          {canUpgrade && (
             <Link to="/billing" className="files__plan-link">
-              Нужно больше — «Премиум», {filesPlan('premium').file_uploads_limit} файлов
+              Нужно больше — «{upgradePlan.name}», {upgradePlan.file_uploads_limit} файлов
             </Link>
           )}
         </div>

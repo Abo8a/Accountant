@@ -378,17 +378,23 @@ describe('пайплайн v1.0', () => {
     }
   });
 
-  it('базовый тариф: новизна не проверяется, в чек-листе есть пометка', async () => {
+  it('если админ выключил проверку новизны на тарифе: новизна не проверяется, в чек-листе есть пометка', async () => {
+    // Монетизация v2: на бесплатном тарифе новизна включена; флаг тарифа по-прежнему отключает её.
     const userId = await createUser(db.sql, { plan: 'free' });
-    const llm = new FakeLlm({ extract: fullExtraction });
-    const deps = makeDeps(db, llm);
-    await seedBudget(deps, userId);
-    const res = await briefAndConfirm(deps, req(userId, { text_input: BRIEF }));
-    expect(res.status).toBe('COMPLETED');
-    if (res.status === 'COMPLETED') {
-      expect(res.checklist.join(' ')).toContain('недоступна на базовом тарифе');
+    await db.sql.query(`UPDATE billing_plans SET features = features || '{"novelty_check": false}'::jsonb WHERE id = 'free'`);
+    try {
+      const llm = new FakeLlm({ extract: fullExtraction });
+      const deps = makeDeps(db, llm);
+      await seedBudget(deps, userId);
+      const res = await briefAndConfirm(deps, req(userId, { text_input: BRIEF }));
+      expect(res.status).toBe('COMPLETED');
+      if (res.status === 'COMPLETED') {
+        expect(res.checklist.join(' ')).toContain('недоступна на вашем тарифе');
+      }
+      expect(llm.calls.some((c) => c.task === 'novelty')).toBe(false);
+    } finally {
+      await db.sql.query(`UPDATE billing_plans SET features = features || '{"novelty_check": true}'::jsonb WHERE id = 'free'`);
     }
-    expect(llm.calls.some((c) => c.task === 'novelty')).toBe(false);
   });
 
   it('ошибка LLM не падает наружу: INTERNAL', async () => {

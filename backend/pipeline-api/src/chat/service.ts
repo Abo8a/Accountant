@@ -12,6 +12,7 @@ import { getRagDb } from '../rag/db';
 import { retrieveRagContext } from '../rag/retriever';
 import { callLlm, consultantSchema } from '../llm/schemas';
 import type { chatPostRequestSchema } from './schema';
+import { AI_CREDITS_EXHAUSTED_MESSAGE } from '../pipeline/handler';
 
 export function toChatMessageOut(row: ChatMessageRow): ChatMessageOut {
   return {
@@ -64,7 +65,12 @@ export async function handleConsultantChat(
     throw new PipelineFailure('USER_BANNED', 'Профиль не найден или заблокирован');
   }
 
-  // ВАЖНО: Анти-фрод сверка (guardCheck) и проверка тарифа (features.consultant) в чате НЕ вызываются
+  // ВАЖНО: Анти-фрод сверка (guardCheck) и проверка тарифа (features.consultant) в чате НЕ вызываются.
+  // ИИ-кредиты проверяются до сохранения вопроса: без кредитов сообщение не уходит модели.
+  const messageCost = ctx.aiCredits.costs.consultant_message;
+  if (ctx.aiCredits.balance < messageCost) {
+    throw new PipelineFailure('AI_CREDITS_EXHAUSTED', AI_CREDITS_EXHAUSTED_MESSAGE);
+  }
   const projectId = ctx.project?.id ?? (await deps.store.ensureProject(req.user_id));
 
   // Предыдущая история диалога до 8 сообщений
@@ -184,6 +190,13 @@ export async function handleConsultantChat(
 
   // Вызов LLM (DeepSeek Flash)
   const out = await callLlm(deps.llm, 'consultant', payload, consultantSchema);
+
+  // Ответ получен — списываем кредиты (ошибка модели выше прервёт обработку и ничего не спишет).
+  try {
+    await deps.store.spendAiCredits(req.user_id, messageCost, 'consultant_message');
+  } catch (err) {
+    deps.logger?.error?.('[consultant] credits charge failed', err);
+  }
 
   // Сохраняем ответ ассистента в БД
   const assistantMsgRow = await deps.store.insertChatMessage({

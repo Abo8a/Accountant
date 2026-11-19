@@ -111,6 +111,10 @@ export async function handleChatRequest(
         sendJson(res, 403, { error: err.message, code: err.code });
         return;
       }
+      if (err instanceof PipelineFailure && err.code === 'AI_CREDITS_EXHAUSTED') {
+        sendJson(res, 402, { error: err.message, code: err.code });
+        return;
+      }
       deps.logger?.error?.('[chat] get history error', err);
       sendJson(res, 500, { error: err?.message ?? 'internal chat error' });
       return;

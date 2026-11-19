@@ -66,42 +66,43 @@ describe('AdminBilling', () => {
     expect(within(table).getAllByRole('row')).toHaveLength(6);
   });
 
-  it('вкладка «Тарифы» показывает три тарифа с полями из дизайна', async () => {
+  it('вкладка «Тарифы»: бесплатный и «Пакет ИИ» с ценой, файлами и ИИ-кредитами', async () => {
     const { user } = renderBilling();
     await user.click(screen.getByRole('tab', { name: 'Тарифы' }));
 
-    expect(await screen.findByRole('heading', { level: 2, name: 'Базовый' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Профессиональный' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Премиум' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Бесплатный' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Пакет ИИ' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2, name: 'Премиум' })).not.toBeInTheDocument();
 
-    // Порядок карточек: Базовый, Профессиональный, Премиум.
-    const prices = screen.getAllByRole('spinbutton', { name: 'Цена, ₽' });
-    expect(prices.map((input) => (input as HTMLInputElement).value)).toEqual(['0', '990', '4990']);
-    const premiumFeatures = screen.getAllByRole('checkbox', { name: 'Консультант' });
-    expect(premiumFeatures.map((input) => (input as HTMLInputElement).checked)).toEqual([false, false, true]);
+    const values = (name: string) => screen.getAllByRole('spinbutton', { name }).map((input) => (input as HTMLInputElement).value);
+    expect(values('Цена, ₽')).toEqual(['0', '499']);
+    expect(values('Лимит файлов')).toEqual(['5', '10']);
+    expect(values('ИИ-кредиты')).toEqual(['20', '60']);
+    const consultant = screen.getAllByRole('checkbox', { name: 'Консультант' });
+    expect(consultant.map((input) => (input as HTMLInputElement).checked)).toEqual([true, true]);
   });
 
   it('изменение тарифа и «Сохранить тарифы» отправляет новые значения в сервис', async () => {
     const { user, savePlans } = renderBilling();
     await user.click(screen.getByRole('tab', { name: 'Тарифы' }));
-    await screen.findByRole('heading', { level: 2, name: 'Премиум' });
+    await screen.findByRole('heading', { level: 2, name: 'Пакет ИИ' });
 
-    const premiumPrice = screen.getAllByRole('spinbutton', { name: 'Цена, ₽' })[2];
-    await user.clear(premiumPrice);
-    await user.type(premiumPrice, '5990');
+    const packCredits = screen.getAllByRole('spinbutton', { name: 'ИИ-кредиты' })[1];
+    await user.clear(packCredits);
+    await user.type(packCredits, '80');
     await user.click(screen.getByRole('button', { name: 'Сохранить тарифы' }));
 
     expect(savePlans).toHaveBeenCalledTimes(1);
     const saved = savePlans.mock.calls[0][0];
-    expect(saved.find((plan) => plan.id === 'premium')?.price_rub).toBe(5990);
-    expect(saved.find((plan) => plan.id === 'pro')?.price_rub).toBe(990);
+    expect(saved.find((plan) => plan.id === 'ai_pack')).toMatchObject({ ai_credits: 80, price_rub: 499 });
+    expect(saved.find((plan) => plan.id === 'free')?.ai_credits).toBe(20);
     expect(await screen.findByText('Сохранено. Уже оплаченные подписки не меняются.')).toBeInTheDocument();
   });
 
   it('после правки тарифа статус снова показывает подсказку до сохранения', async () => {
     const { user } = renderBilling();
     await user.click(screen.getByRole('tab', { name: 'Тарифы' }));
-    await screen.findByRole('heading', { level: 2, name: 'Премиум' });
+    await screen.findByRole('heading', { level: 2, name: 'Пакет ИИ' });
 
     await user.click(screen.getByRole('button', { name: 'Сохранить тарифы' }));
     expect(await screen.findByText('Сохранено. Уже оплаченные подписки не меняются.')).toBeInTheDocument();
@@ -113,9 +114,9 @@ describe('AdminBilling', () => {
   it('флаги функций тарифа переключаются', async () => {
     const { user } = renderBilling();
     await user.click(screen.getByRole('tab', { name: 'Тарифы' }));
-    await screen.findByRole('heading', { level: 2, name: 'Премиум' });
+    await screen.findByRole('heading', { level: 2, name: 'Пакет ИИ' });
 
-    const consultant = screen.getAllByRole('checkbox', { name: 'Консультант' })[2];
+    const consultant = screen.getAllByRole('checkbox', { name: 'Консультант' })[1];
     await user.click(consultant);
     expect(consultant).not.toBeChecked();
   });

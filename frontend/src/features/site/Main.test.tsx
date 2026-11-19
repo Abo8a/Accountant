@@ -88,28 +88,26 @@ describe('Main (лендинг)', () => {
     expect(screen.getByRole('link', { name: 'Подробнее о тарифах' })).toHaveAttribute('href', '/pricing');
   });
 
-  it('три полные карточки тарифов, как на странице тарифов', () => {
+  it('тарифы: бесплатно и «Пакет ИИ», как на странице тарифов; без переключателя «Продление»', () => {
     renderSite('/');
-    for (const name of ['Базовый', 'Профессиональный', 'Премиум']) {
-      expect(screen.getByRole('heading', { level: 3, name })).toBeInTheDocument();
-    }
+    expect(screen.getByRole('heading', { level: 3, name: 'Бесплатно' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Пакет ИИ' })).toBeInTheDocument();
     expect(screen.getByText('0 ₽')).toBeInTheDocument();
-    expect(screen.getByText('990 ₽')).toBeInTheDocument();
-    expect(screen.getByText('4 990 ₽')).toBeInTheDocument();
-    expect(screen.getByText('Рекомендуем')).toBeInTheDocument();
+    expect(screen.getByText('499 ₽')).toBeInTheDocument();
+    expect(screen.getByText('20 ИИ-кредитов — один раз')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Начать бесплатно' })).toHaveAttribute('href', '/auth');
-    expect(screen.getByRole('link', { name: 'Выбрать Профессиональный' })).toHaveAttribute('href', '/auth');
-    expect(screen.getByRole('link', { name: 'Выбрать Премиум' })).toHaveAttribute('href', '/auth');
+    expect(screen.getByRole('link', { name: 'Подключить пакет' })).toHaveAttribute('href', '/auth');
+    expect(screen.queryByRole('group', { name: 'Период оплаты' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Профессиональный')).not.toBeInTheDocument();
   });
 
-  it('переключатель «Продление» на лендинге пересчитывает цены', async () => {
+  it('услуги специалистов на лендинге: 5% с потолком 50 000 ₽ и отчёт по этапу', () => {
     renderSite('/');
-    const toggle = screen.getByRole('group', { name: 'Период оплаты' });
-    await userEvent.click(within(toggle).getByRole('button', { name: 'Продление' }));
-    expect(screen.getByText('841 ₽')).toBeInTheDocument();
-    expect(screen.getByText('4 491 ₽')).toBeInTheDocument();
-    expect(screen.getByText('Скидка 15% при продлении')).toBeInTheDocument();
-    expect(screen.getByText('Скидка 10% при продлении')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Услуги специалистов' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Сопровождение после результата' })).toBeInTheDocument();
+    expect(screen.getByText('от полученного финансирования, максимум 50 000 ₽')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Отчёт по этапу' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Оставить заявку' })).toHaveLength(2);
   });
 
   it('блок «Эксперт фонда»: фрагмент паспорта с тремя цветами и три пункта', () => {
@@ -124,10 +122,14 @@ describe('Main (лендинг)', () => {
     expect(screen.queryByText('Поправили текст — связи пересчитаются')).not.toBeInTheDocument();
   });
 
-  it('пять вопросов FAQ, каждый — раскрывающийся блок', () => {
+  it('шесть вопросов FAQ, каждый — раскрывающийся блок; про файлы, кредиты и процент — по новой модели', () => {
     renderSite('/');
     const items = document.querySelectorAll('details.main__faq-item');
-    expect(items).toHaveLength(5);
+    expect(items).toHaveLength(6);
+    expect(screen.getByText('PDF, DOCX и PPTX, включая сканы. Бесплатно — до 5 файлов, с «Пакетом ИИ» — до 10.')).toBeInTheDocument();
+    expect(screen.getByText('Что будет, когда закончатся ИИ-кредиты?')).toBeInTheDocument();
+    expect(screen.getByText('Нужно ли платить процент после победы?')).toBeInTheDocument();
+    expect(screen.queryByText(/«Профессиональный» и «Премиум»/)).not.toBeInTheDocument();
     expect(screen.getByText('Буха гарантирует победу в конкурсе?')).toBeInTheDocument();
     expect(screen.getByText('Это официальный сервис фонда?')).toBeInTheDocument();
   });

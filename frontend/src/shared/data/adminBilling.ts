@@ -111,6 +111,8 @@ function planFromCatalog(plan: Plan): AdminPlan {
     duration_days: plan.duration_days,
     file_uploads_limit: plan.file_uploads_limit,
     renewal_discount_percent: plan.renewal_discount_percent,
+    ai_credits: plan.ai_credits,
+    is_active: plan.is_active,
     features: { ...plan.features },
   };
 }

@@ -44,7 +44,17 @@ export async function sendChatMessage(params: {
   });
 
   if (!res.ok) {
+    // Кредиты закончились: показываем пользователю текст сервера (что делать дальше).
+    if (res.status === 402) {
+      const body = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
+      if (body?.code === 'AI_CREDITS_EXHAUSTED' && body.error) throw new ChatCreditsError(body.error);
+    }
     throw new Error(`Ошибка отправки сообщения: HTTP ${res.status}`);
   }
   return res.json();
+}
+
+/** ИИ-кредиты закончились: сообщение для пользователя — в message. */
+export class ChatCreditsError extends Error {
+  readonly code = 'AI_CREDITS_EXHAUSTED';
 }

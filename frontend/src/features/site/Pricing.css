@@ -17,9 +17,12 @@
   color: var(--color-ink);
 }
 
-.pricing__toggle {
-  align-self: flex-start;
-  margin-top: var(--space-8);
+/* Подзаголовок под «Тарифы и цены» (монетизация v2): размер и цвет — как у описаний карточек. */
+.pricing__lead {
+  font-size: var(--fs-17);
+  line-height: 1.5;
+  color: var(--color-gray-600);
+  max-width: 720px;
 }
 
 /* Секция с карточками; сами карточки — PricingCards.css */
@@ -47,7 +50,7 @@
 
 .pricing__table {
   width: 100%;
-  min-width: 760px;
+  min-width: 560px;
   border-collapse: collapse;
   font-size: var(--fs-17);
 }

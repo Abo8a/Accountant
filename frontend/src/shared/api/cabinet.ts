@@ -31,12 +31,23 @@ export interface CabinetResult {
   calculated_at: string;
 }
 
+/** ИИ-кредиты пользователя (монетизация v2). */
+export interface CabinetAiCredits {
+  balance: number;
+  /** Кредиты из «Пакета ИИ» и срок ближайшей действующей пачки. */
+  paid_balance: number;
+  paid_expires_at: string | null;
+  costs: { ai_step: number; file: number; consultant_message: number };
+}
+
 export interface CabinetState {
-  plan_id: 'free' | 'pro' | 'premium';
+  plan_id: 'free' | 'ai_pack' | 'pro' | 'premium';
   /** Окончание оплаченного тарифа (ISO) или null — бесплатный тариф. */
   plan_expires_at: string | null;
   files_used: number;
   files_limit: number;
+  /** Нет у старого бэкенда — тогда кредиты не показываем. */
+  ai_credits?: CabinetAiCredits;
   founder: { full_name?: string; contacts?: string; education_status?: string; university?: string; region?: string };
   study_certificate: StudyCertificate | null;
   files: CabinetFile[];

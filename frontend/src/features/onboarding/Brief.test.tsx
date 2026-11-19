@@ -37,10 +37,10 @@ describe('Brief', () => {
     expect(screen.getByRole('link', { name: 'Назад' })).toHaveAttribute('href', '/onboarding');
   });
 
-  it('переключатель прототипа: по умолчанию «Профи»', () => {
+  it('переключатель прототипа: по умолчанию «Пакет ИИ»', () => {
     renderBrief();
-    expect(screen.getByRole('button', { name: 'Профи' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Базовый' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Пакет ИИ' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Бесплатный' })).toHaveAttribute('aria-pressed', 'false');
   });
 
   describe('ветка «файлы»', () => {
@@ -145,20 +145,20 @@ describe('Brief', () => {
     });
   });
 
-  describe('тариф «Базовый»', () => {
+  describe('бесплатный тариф', () => {
     it('загрузка открыта: зона загрузки с лимитом 5 файлов, пейволла нет, анкета доступна', async () => {
       const user = userEvent.setup();
       renderBrief();
-      await user.click(screen.getByRole('button', { name: 'Базовый' }));
+      await user.click(screen.getByRole('button', { name: 'Бесплатный' }));
 
-      expect(screen.getByRole('button', { name: 'Базовый' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Бесплатный' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByRole('button', { name: /Перетащите файлы сюда/ })).toHaveTextContent('PDF, DOCX, PPTX, сканы — до 5 файлов');
       expect(screen.queryByRole('heading', { level: 2, name: 'Разбор документов — на тарифе «Профессиональный»' })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'Подключить за 990 ₽' })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'У меня нет файлов' })).toBeInTheDocument();
     });
 
-    it('на «Профи» в подсказке зоны загрузки — до 10 файлов', () => {
+    it('на «Пакете ИИ» в подсказке зоны загрузки — до 10 файлов', () => {
       renderBrief();
       expect(screen.getByRole('button', { name: /Перетащите файлы сюда/ })).toHaveTextContent('PDF, DOCX, PPTX, сканы — до 10 файлов');
     });
@@ -166,7 +166,7 @@ describe('Brief', () => {
     it('ветка «файлы»: счётчик считает от лимита 5', async () => {
       const user = userEvent.setup();
       renderBrief();
-      await user.click(screen.getByRole('button', { name: 'Базовый' }));
+      await user.click(screen.getByRole('button', { name: 'Бесплатный' }));
       await user.click(screen.getByRole('button', { name: /Перетащите файлы сюда/ }));
       expect(screen.getByRole('heading', { level: 1, name: 'Материалы загружены' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Добавить ещё файл/ })).toHaveTextContent('· использовано 2 из 5');
@@ -175,7 +175,7 @@ describe('Brief', () => {
     it('в анкете на Базовом есть ссылка «Нашлись файлы? Загрузить» и она возвращает к загрузке', async () => {
       const user = userEvent.setup();
       renderBrief();
-      await user.click(screen.getByRole('button', { name: 'Базовый' }));
+      await user.click(screen.getByRole('button', { name: 'Бесплатный' }));
       await user.click(screen.getByRole('button', { name: 'У меня нет файлов' }));
       await user.click(screen.getByRole('button', { name: 'Нашлись файлы? Загрузить' }));
       expect(screen.getByRole('heading', { level: 1, name: 'Есть материалы о проекте?' })).toBeInTheDocument();

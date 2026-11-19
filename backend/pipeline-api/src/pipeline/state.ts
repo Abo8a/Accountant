@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import type { BlockAuditOut, BudgetAuditOut, PipelinePassportField } from '@passport/contracts';
 import { STUDY_CERTIFICATE_WARNING } from '@passport/passport-core';
 import { PipelineFailure } from '../errors';
-import type { ProjectFileRow, StudyCertificateMeta, UserContext } from '../db/store';
+import type { AiCredits, ProjectFileRow, StudyCertificateMeta, UserContext } from '../db/store';
 import type { PipelineDeps } from './deps';
 import { loadAuditReport } from './audit';
 import { buildPassportFields } from './passport';
@@ -15,6 +15,8 @@ export interface CabinetState {
   plan_expires_at: string | null;
   files_used: number;
   files_limit: number;
+  /** ИИ-кредиты: остаток, из них платные со сроком, стоимость действий. */
+  ai_credits: AiCredits;
   founder: Record<string, unknown>;
   study_certificate: StudyCertificateMeta | null;
   /** Материалы проекта (загруженные файлы) для экрана «Материалы». */
@@ -47,6 +49,7 @@ export async function loadCabinetState(deps: PipelineDeps, ctx: UserContext): Pr
     plan_expires_at: ctx.planExpiresAt,
     files_used: ctx.uploadedFilesCount,
     files_limit: ctx.fileUploadsLimit,
+    ai_credits: ctx.aiCredits,
     founder: ctx.founderData,
     study_certificate: ctx.studyCertificate,
     files: ctx.project ? await deps.store.listProjectFiles(ctx.project.id) : [],

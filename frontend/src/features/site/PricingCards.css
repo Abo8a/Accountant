@@ -109,3 +109,31 @@
 .plans__cta {
   margin-top: auto;
 }
+
+/* Монетизация v2: две карточки в ряд и сноска под карточками (в стиле прежних карточек, токены tokens.css). */
+.plans-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-20);
+}
+
+.plans--two {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.plans__footnote {
+  font-size: var(--fs-14);
+  line-height: 1.5;
+  color: var(--color-gray-600);
+  max-width: 880px;
+}
+
+@media (max-width: 480px) {
+  .plans--two {
+    grid-template-columns: 1fr;
+  }
+
+  .plans__card {
+    padding: var(--space-24);
+  }
+}

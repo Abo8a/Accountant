@@ -6,7 +6,7 @@ import { noteFieldChange, invalidateDependents } from './invalidation';
 import { PipelineFailure } from '../errors';
 import { fieldKb } from '../kb/manifest';
 import { wrapUntrustedData } from '../promptGuard';
-import type { UserContext } from '../db/store';
+import type { AiCreditCosts, UserContext } from '../db/store';
 import { ingestFiles } from './intake';
 import type { PipelineDeps } from './deps';
 import { answerField, extractPassport } from './passport';
@@ -19,6 +19,23 @@ import { screenStopFactors, stopFactorBriefQuestion } from './screen';
 
 const SHORT_ANSWER_CHARS = 150;
 const CODE_FIELDS = new Set(['4/direction', '4/tech_challenge']);
+
+/** Сообщение, когда ИИ-кредитов не хватает на действие. Ручная работа при этом остаётся доступной. */
+export const AI_CREDITS_EXHAUSTED_MESSAGE =
+  'ИИ-кредиты закончились. Ручное редактирование, материалы и экспорт остаются доступны. ' +
+  'Чтобы продолжить работу с ИИ, подключите «Пакет ИИ» в разделе «Тариф и оплата».';
+
+/** Действия, которые тратят ИИ-кредиты. Ручные правки формы и пропуск вопроса — бесплатны. */
+export function isAiAction(req: PipelineRequest): boolean {
+  if (req.action === 'submit_answer') return true;
+  if (req.action === 'init_or_upload') return Boolean(req.text_input?.trim()) || (req.files?.length ?? 0) > 0;
+  return false;
+}
+
+/** Стоимость действия в кредитах: шаг с ИИ плюс разбор каждого нового файла. */
+export function aiActionCost(req: PipelineRequest, costs: AiCreditCosts): number {
+  return costs.ai_step + (req.files?.length ?? 0) * costs.file;
+}
 
 /** Каждый вызов LLM в этом запросе пишется в журнал llm_call_log (блок 4). */
 export function withCallLogging(deps: PipelineDeps, userId: string | null): PipelineDeps {
@@ -36,9 +53,12 @@ export async function handlePipeline(baseDeps: PipelineDeps, req: PipelineReques
     if (lock === 'busy') {
       return { status: 'ERROR', code: 'ALREADY_PROCESSING', message: 'Проверка уже идёт. Дождитесь результата и не отправляйте запрос повторно.' };
     }
-    if (lock === 'no_user') return await run(deps, req); // профиля нет: run ответит USER_BANNED
+    if (lock === 'no_user') return await run(deps, req, {}); // профиля нет: run ответит USER_BANNED
     try {
-      return await run(deps, req);
+      const meter: CreditMeter = {};
+      const response = await run(deps, req, meter);
+      await chargeCredits(deps, req, meter, response);
+      return response;
     } finally {
       await deps.store.releaseProcessingLock(req.user_id);
     }
@@ -57,7 +77,29 @@ export function skipSet(req: PipelineRequest): Set<string> {
   return skippedKeys([...(req.skipped_fields ?? []), ...current]);
 }
 
-async function run(deps: PipelineDeps, req: PipelineRequest): Promise<PipelineResponse> {
+/** Что нужно для списания кредитов после ответа: стоимость действий из контекста пользователя. */
+interface CreditMeter {
+  costs?: AiCreditCosts;
+}
+
+/**
+ * Списывает ИИ-кредиты после успешного ответа. Ошибки (status ERROR) и ответы без обращения к модели
+ * не списывают ничего. Сбой списания не ломает ответ пользователю — пишем в журнал.
+ */
+async function chargeCredits(deps: PipelineDeps, req: PipelineRequest, meter: CreditMeter, response: PipelineResponse) {
+  if (!meter.costs || response.status === 'ERROR' || !isAiAction(req)) return;
+  const llm = deps.llm as LoggedLlm;
+  const files = req.files?.length ?? 0;
+  if (llm.completeCalls === 0 && files === 0) return;
+  const amount = (llm.completeCalls > 0 ? meter.costs.ai_step : 0) + files * meter.costs.file;
+  try {
+    await deps.store.spendAiCredits(req.user_id, amount, req.action);
+  } catch (err) {
+    deps.logger.error('[pipeline] credits charge failed', err);
+  }
+}
+
+async function run(deps: PipelineDeps, req: PipelineRequest, meter: CreditMeter): Promise<PipelineResponse> {
   const { store, kb } = deps;
 
   // ШАГ 1: бан, программа, квота, ФИО
@@ -77,6 +119,14 @@ async function run(deps: PipelineDeps, req: PipelineRequest): Promise<PipelineRe
     if (ctx.uploadedFilesCount + files.length > ctx.fileUploadsLimit) {
       throw new PipelineFailure('FILE_QUOTA_EXCEEDED', 'Превышен лимит загрузки файлов по тарифу');
     }
+  }
+  // ИИ-кредиты: стоимость видна заранее, без кредитов ИИ-действие не начинается (ручная работа доступна всегда).
+  if (isAiAction(req)) {
+    const cost = aiActionCost(req, ctx.aiCredits.costs);
+    if (ctx.aiCredits.balance < cost) {
+      throw new PipelineFailure('AI_CREDITS_EXHAUSTED', AI_CREDITS_EXHAUSTED_MESSAGE);
+    }
+    meter.costs = ctx.aiCredits.costs;
   }
   // ФИО хранится в ключе full_name (нормализация — в store.normalizeFounder).
   if (!ctx.founderData.full_name) {

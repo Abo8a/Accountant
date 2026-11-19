@@ -196,7 +196,7 @@ describe('LiveFiles: материалы пользователя с сервер
       </MemoryRouter>,
     );
 
-  it('«Базовый» с двумя файлами: список с сервера, «из 5», зона загрузки на месте, заглушки «скоро появится» нет', () => {
+  it('бесплатный тариф с двумя файлами: список с сервера, «из 5», зона загрузки на месте, заглушки «скоро появится» нет', () => {
     cabinet.state = state();
     renderLiveFiles();
     expect(screen.getByText('Pitch.pdf')).toBeInTheDocument();
@@ -205,7 +205,7 @@ describe('LiveFiles: материалы пользователя с сервер
     expect(screen.getByText('12 страниц · 1,0 МБ')).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: 'Использовано файлов' })).toHaveAttribute('aria-valuenow', '2');
     expect(screen.getByText('из 5')).toBeInTheDocument();
-    expect(screen.getByText('Тариф «Базовый»')).toBeInTheDocument();
+    expect(screen.getByText('Тариф «Бесплатный»')).toBeInTheDocument();
     expect(screen.getByText('Перетащите файлы сюда или', { exact: false })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Добавить файлы' })).toBeInTheDocument();
     expect(screen.queryByText(/скоро появится/)).not.toBeInTheDocument();

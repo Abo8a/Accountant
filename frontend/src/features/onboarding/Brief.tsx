@@ -10,11 +10,11 @@ import './common.css';
 import './Brief.css';
 
 // Стартовый бриф — design/project/Brief.dc.html. Три состояния: «есть файлы?» (ask),
-// «Материалы загружены» (files) и анкета (form). Загрузка открыта на любом тарифе: «Базовый» — до 5 файлов,
-// «Профессиональный» — до 10 (в эталоне у «Базового» был пейволл — политика тарифов изменена по решению владельца).
+// «Материалы загружены» (files) и анкета (form). Загрузка открыта на любом тарифе: бесплатный — до 5 файлов,
+// «Пакет ИИ» — до 10 (в эталоне у «Базового» был пейволл — политика тарифов изменена по решению владельца, монетизация v2).
 
 type Step = 'ask' | 'files' | 'form';
-type Plan = 'free' | 'pro';
+type Plan = 'free' | 'ai_pack';
 type FileKind = 'ready' | 'scan' | 'duplicate';
 
 interface UploadedFile {
@@ -44,11 +44,11 @@ export function Brief() {
   const [step, setStep] = useState<Step>(env.liveApi ? 'form' : 'ask');
   const [draft] = useState<Record<string, string>>(() => (env.liveApi ? loadFlow().briefDraft ?? {} : {}));
   const [refusal] = useState(() => (env.liveApi ? loadFlow().briefRefusal ?? null : null));
-  const [plan, setPlan] = useState<Plan>('pro');
+  const [plan, setPlan] = useState<Plan>('ai_pack');
   const [files, setFiles] = useState<UploadedFile[]>(INITIAL_FILES);
 
   const free = plan === 'free';
-  // Загрузка доступна на любом тарифе; различается только лимит файлов (Базовый — 5, Профессиональный — 10).
+  // Загрузка доступна на любом тарифе; различается только лимит файлов (бесплатный — 5, «Пакет ИИ» — 10).
   const fileLimit = getPlan(plan).file_uploads_limit;
   const current: Step = step;
   const canUpload = !env.liveApi;
@@ -87,10 +87,10 @@ export function Brief() {
           <div role="group" aria-label="Тариф для прототипа" className="brief-proto">
             <span className="brief-proto__label">Прототип:</span>
             <button type="button" aria-pressed={free} onClick={() => setPlan('free')} className="brief-proto__btn">
-              Базовый
+              Бесплатный
             </button>
-            <button type="button" aria-pressed={!free} onClick={() => setPlan('pro')} className="brief-proto__btn">
-              Профи
+            <button type="button" aria-pressed={!free} onClick={() => setPlan('ai_pack')} className="brief-proto__btn">
+              Пакет ИИ
             </button>
           </div>
           )

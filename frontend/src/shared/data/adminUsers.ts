@@ -12,7 +12,7 @@ export interface AdminUser {
   /** Название проекта или «—», если проекта нет. */
   project: string;
   status: AdminUserStatus;
-  /** Тариф как в таблице: «Профессиональный до 01.12» или «Базовый». */
+  /** Тариф как в таблице: «Пакет ИИ до 01.12» или «Бесплатный» (у старых подписок — их название). */
   plan: string;
   /** Дата регистрации, ДД.ММ.ГГГГ (колонка таблицы). */
   created: string;
@@ -37,7 +37,7 @@ export interface AdminUser {
 }
 
 /** Тарифы, которые админ может выдать вручную: все платные из plans.ts. */
-export const GRANTABLE_PLAN_IDS: readonly Exclude<PlanId, 'free'>[] = ['pro', 'premium'];
+export const GRANTABLE_PLAN_IDS: readonly Exclude<PlanId, 'free'>[] = ['ai_pack'];
 
 export interface ManualGrant {
   planId: Exclude<PlanId, 'free'>;
@@ -79,7 +79,7 @@ export const DEMO_ADMIN_USERS: readonly AdminUser[] = [
     email: 'anna@example.ru',
     project: 'Молодёжь рядом',
     status: 'generating',
-    plan: 'Базовый',
+    plan: 'Бесплатный',
     created: '07.11.2026',
     createdAt: '2026-11-07T15:48',
     banEventAt: null,
@@ -117,7 +117,7 @@ export const DEMO_ADMIN_USERS: readonly AdminUser[] = [
     email: 'petr@example.ru',
     project: '—',
     status: 'none',
-    plan: 'Базовый',
+    plan: 'Бесплатный',
     created: '08.11.2026',
     createdAt: '2026-11-08T09:37',
     banEventAt: null,

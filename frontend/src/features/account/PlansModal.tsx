@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef } from 'react';
-import { PLANS, formatRub } from '../../shared/data/plans';
+import { CREDITS_EXPLAINED, PLANS, formatRub, pluralDays } from '../../shared/data/plans';
 import './PlansModal.css';
 
-// Модальное окно «Тарифы»: три тарифа из админки (название, цена, описание).
+// Модальное окно «Тарифы»: тарифы, которые продаются сейчас (бесплатный и «Пакет ИИ»), и как считаются кредиты.
 // Вместо окна оплаты, пока нет платёжного шлюза (FLAGS.HIDE_PAYMENT_GATEWAY). Без сторонних библиотек.
 
 export interface PlansModalProps {
@@ -54,11 +54,17 @@ export function PlansModal({ onClose }: PlansModalProps) {
               <h3 className="plans-modal__name">{plan.name}</h3>
               <p className="plans-modal__desc">{plan.description}</p>
               <p className="plans-modal__price">
-                {formatRub(plan.price_rub)} <span className="plans-modal__price-unit">за {plan.duration_days} дней</span>
+                {formatRub(plan.price_rub)}{' '}
+                {plan.duration_days > 0 && (
+                  <span className="plans-modal__price-unit">
+                    за {plan.duration_days} {pluralDays(plan.duration_days)}
+                  </span>
+                )}
               </p>
             </li>
           ))}
         </ul>
+        <p className="plans-modal__desc">{CREDITS_EXPLAINED}</p>
       </div>
     </div>
   );
