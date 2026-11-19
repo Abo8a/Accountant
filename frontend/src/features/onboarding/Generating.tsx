@@ -231,7 +231,7 @@ export function Generating() {
                 </li>
               </ul>
               <div className="gen-actions">
-                <Link to="/gaps" className="gen-cta gen-cta--primary">
+                <Link to="/passport" className="gen-cta gen-cta--primary">
                   Ответить на вопросы
                 </Link>
                 <Link to="/passport" className="gen-cta gen-cta--outline">

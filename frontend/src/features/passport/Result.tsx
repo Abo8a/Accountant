@@ -80,8 +80,8 @@ const POOL: Record<string, TodoItem> = {
   proof: { id: 'proof', n: 7, block: 'Блок 7', to: '/passport', text: 'Приложить материалы двух фокус-групп и подтверждение выручки 10 000 ₽' },
   rid: { id: 'rid', n: 9, block: 'Блок 9', to: '/passport', kind: 'audit', text: 'Проверить совпадение заявителя и правообладателя по свидетельству РИД' },
   sk: { id: 'sk', n: 10, block: 'Блок 10', to: '/passport', text: 'Приложить оригинал уведомления о статусе участника Сколково' },
-  budget: { id: 'budget', n: 99, block: 'Смета', to: '/gaps', kind: 'audit', text: 'Исправить смету по замечаниям аудита' },
-  budgetStop: { id: 'budgetStop', n: 99, block: 'Смета', to: '/gaps', kind: 'stop', text: 'Уменьшить расходы 1-го этапа: сейчас 25 000 ₽, лимит — 20 000 ₽' },
+  budget: { id: 'budget', n: 99, block: 'Смета', to: '/passport?block=budget', kind: 'audit', text: 'Исправить смету по замечаниям аудита' },
+  budgetStop: { id: 'budgetStop', n: 99, block: 'Смета', to: '/passport?block=budget', kind: 'stop', text: 'Уменьшить расходы 1-го этапа: сейчас 25 000 ₽, лимит — 20 000 ₽' },
 };
 
 const SETS: Record<Verdict, string[]> = {
@@ -121,7 +121,7 @@ export function todoFromCompleted(res: PipelineCompleted): TodoItem[] {
         id: `audit-${a.section_id}`,
         n: a.section_id,
         block: `Блок ${a.section_id}`,
-        to: '/passport',
+        to: `/passport?block=${a.section_id}`,
         kind: 'audit',
         text: a.remark ?? `Доработать блок ${a.section_id} по замечаниям аудита`,
         fix: a.how_to_fix ?? undefined,
@@ -132,7 +132,7 @@ export function todoFromCompleted(res: PipelineCompleted): TodoItem[] {
       id: 'budget',
       n: 99,
       block: 'Смета',
-      to: '/gaps',
+      to: '/passport?block=budget',
       kind: 'audit',
       text: res.budget_audit.remark ?? 'Исправить смету по замечаниям аудита',
       fix: res.budget_audit.how_to_fix ?? undefined,
@@ -203,7 +203,7 @@ export function Result({ exportReady = false }: { exportReady?: boolean } = {}) 
   const items = completed
     ? todoFromCompleted(completed)
     : env.liveApi
-      ? [{ id: 'gaps', n: 0, block: 'Паспорт', to: '/gaps', kind: 'audit' as const, text: `Ответить на вопросы в «Пробелах»${openGaps > 0 ? ` (осталось ${openGaps})` : ''} — после этого Буха проверит паспорт целиком` }]
+      ? [{ id: 'gaps', n: 0, block: 'Паспорт', to: '/passport', kind: 'audit' as const, text: `Дозаполнить пустые поля в блоках паспорта${openGaps > 0 ? ` (осталось ${openGaps})` : ''} — после этого Буха проверит паспорт целиком` }]
       : SETS[demoVerdict].map((id) => POOL[id]).sort(byBlock);
   const confirmation = completed
     ? confirmationFromCompleted(completed)

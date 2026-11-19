@@ -83,10 +83,10 @@ describe('Result', () => {
     expect(screen.queryByRole('button', { name: 'Согласовать паспорт' })).not.toBeInTheDocument();
   });
 
-  it('«Проверить заново» ведёт на сборку, пункты смета — на пробелы', () => {
+  it('«Проверить заново» ведёт на сборку, пункты смета — на смету в паспорте', () => {
     renderResult();
     expect(screen.getByRole('link', { name: 'Проверить заново' })).toHaveAttribute('href', '/generating');
-    expect(within(todoList()).getByRole('link', { name: 'Смета' })).toHaveAttribute('href', '/gaps');
+    expect(within(todoList()).getByRole('link', { name: 'Смета' })).toHaveAttribute('href', '/passport?block=budget');
     expect(within(todoList()).getByRole('link', { name: 'Блок 1' })).toHaveAttribute('href', '/passport');
   });
 });

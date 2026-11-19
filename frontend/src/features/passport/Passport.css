@@ -765,3 +765,18 @@ a.passport-claim.passport-claim--muted {
   height: 1px;
   opacity: 0;
 }
+
+/* Живой режим: «Смета» под блоками (эталон Passport.dc.html: отступ сверху и линия-разделитель). */
+.passport__nav-item--budget {
+  margin-top: var(--space-8);
+  border-top: 1px solid var(--color-gray-200);
+  border-radius: 0;
+}
+
+/* Вопрос пайплайна к полю-пробелу над редактором. */
+.passport__editor-question {
+  margin: 0;
+  font-size: var(--fs-16);
+  line-height: var(--lh-text);
+  color: var(--color-ink);
+}

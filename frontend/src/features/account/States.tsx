@@ -128,7 +128,7 @@ export function States() {
               <h2 id="s6" className="states__dialog-title">Скачать пока нельзя</h2>
               <p className="states__text states__text--body">Паспорт выгружается, когда аудит одобрил все блоки и смету. Сейчас на доработке: блок 6 «Аналоги», блок 9 «Права и РИД» и смета.</p>
               <div className="states__actions">
-                <Link to="/gaps" className="states__btn-dark">Закрыть пробелы</Link>
+                <Link to="/passport" className="states__btn-dark">Закрыть пробелы</Link>
                 <Link to="/result" className="states__btn-link">Итог проверки</Link>
               </div>
             </div>

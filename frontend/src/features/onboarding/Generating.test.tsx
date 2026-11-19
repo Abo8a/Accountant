@@ -77,7 +77,7 @@ describe('Generating', () => {
     expect(within(tiles).getByText('Одобрено аудитом')).toBeInTheDocument();
     expect(within(tiles).getByText('Осталось пробелов')).toBeInTheDocument();
     expect(within(tiles).getByText('включая направление и смету')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Ответить на вопросы' })).toHaveAttribute('href', '/gaps');
+    expect(screen.getByRole('link', { name: 'Ответить на вопросы' })).toHaveAttribute('href', '/passport');
     expect(screen.getByRole('link', { name: 'Сначала посмотреть паспорт' })).toHaveAttribute('href', '/passport');
     expect(screen.getByText('18')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Буха читает материалы' })).not.toBeInTheDocument();

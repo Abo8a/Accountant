@@ -8,7 +8,6 @@ import { Auth } from '../features/site/Auth';
 import { Onboarding } from '../features/onboarding/Onboarding';
 import { Brief } from '../features/onboarding/Brief';
 import { Generating } from '../features/onboarding/Generating';
-import { Gaps } from '../features/passport/Gaps';
 import { Result } from '../features/passport/Result';
 import { Passport } from '../features/passport/Passport';
 import { Files, LiveFiles } from '../features/account/Files';
@@ -47,7 +46,6 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/onboarding', shell: 'none', element: <Onboarding />, title: 'Буха — профиль основателя' },
   { path: '/brief', shell: 'none', element: <Brief />, title: 'Буха — стартовый бриф' },
   { path: '/generating', shell: 'none', element: <Generating />, title: 'Буха — сборка паспорта' },
-  { path: '/gaps', shell: 'cabinet', element: <Gaps />, title: 'Буха — пробелы и новизна' },
   { path: '/result', shell: 'cabinet', element: <Result />, title: 'Буха — итог' },
   { path: '/passport', shell: 'cabinet', element: <Passport />, title: 'Буха — паспорт проекта' },
   { path: '/files', shell: 'cabinet', element: env.liveApi ? <LiveFiles /> : <Files />, title: 'Буха — материалы проекта' },
@@ -92,6 +90,8 @@ export function AppRoutes() {
           <Route key={r.path} path={r.path} element={r.element} />
         ))}
       </Route>
+      {/* Раздела «Пробелы» больше нет: пробелы дорабатываются в блоках паспорта. Старые ссылки ведут туда. */}
+      <Route path="/gaps" element={<Navigate to="/passport" replace />} />
       <Route path="/admin-panel" element={<Navigate to="/admin-panel/users" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
