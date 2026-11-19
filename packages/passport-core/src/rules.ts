@@ -21,7 +21,7 @@ export interface RuleEngineResult {
  * extraStopFactors — проверки, которые считаются вне правил (смета, согласованность направления и вызова).
  */
 export const STUDY_CERTIFICATE_WARNING =
-  'Справка об обучении в вузе не загружена: без неё фонд не примет заявку. Загрузите её в профиле — паспорт можно готовить и до этого.';
+  'Справка об обучении в вузе не загружена. Для паспорта она не нужна, а для подачи заявки в фонд обязательна — загрузите её в профиле до подачи.';
 
 export function evaluatePassportRules(
   founderData: { full_name?: string; status?: string; education_status?: string; study_certificate_uploaded?: boolean } | null,
@@ -67,8 +67,10 @@ export function evaluatePassportRules(
     warnings.push(`Фактические достижения без подтверждающих документов (${unverifiedFacts.length} шт.).`);
   }
 
+  // Справка нужна для подачи, а не для паспорта: её предупреждение показываем, но итог по нему не понижаем.
+  const blockingWarnings = warnings.filter((w) => w !== STUDY_CERTIFICATE_WARNING);
   const eligibility_status: EligibilityStatus =
-    stopFactors.length > 0 ? 'NOT_ELIGIBLE' : warnings.length > 0 ? 'NEEDS_CLARIFICATION' : 'ELIGIBLE';
+    stopFactors.length > 0 ? 'NOT_ELIGIBLE' : blockingWarnings.length > 0 ? 'NEEDS_CLARIFICATION' : 'ELIGIBLE';
 
   return { program, eligibility_status, stop_factors: stopFactors, warnings };
 }

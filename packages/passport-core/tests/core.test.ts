@@ -70,4 +70,11 @@ describe('evaluatePassportRules', () => {
     const r = evaluatePassportRules({ full_name: 'Иван', status: 'student' }, records, []);
     expect(r.eligibility_status).toBe('ELIGIBLE');
   });
+
+  it('без справки — только предупреждение, итог не понижается', () => {
+    const records = [2, 3, 4, 5, 6, 7, 8, 9, 10].map((section_id) => ({ section_id, value: 'текст блока' }));
+    const r = evaluatePassportRules({ full_name: 'Иван', study_certificate_uploaded: false }, records, []);
+    expect(r.eligibility_status).toBe('ELIGIBLE');
+    expect(r.warnings.join(' ')).toContain('Справка об обучении в вузе не загружена');
+  });
 });

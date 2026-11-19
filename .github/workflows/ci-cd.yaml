@@ -205,7 +205,10 @@ jobs:
             echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod"
             \$COMPOSE pull
-            \$COMPOSE up -d --wait --wait-timeout 600 --remove-orphans
+            # rag-seed — одноразовый: от него никто не зависит, и --wait считает его быстрый выход (даже с кодом 0) ошибкой.
+            # Поэтому ждём здоровья остальных сервисов, а сидирование запускаем отдельно, без ожидания.
+            \$COMPOSE up -d --wait --wait-timeout 600 --remove-orphans \$(\$COMPOSE config --services | grep -vx rag-seed)
+            \$COMPOSE up -d --no-deps rag-seed
             \$COMPOSE ps
           EOF
 

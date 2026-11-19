@@ -244,7 +244,7 @@ describe('справка об обучении: обязательна для п
     expect(state.study_certificate).toMatchObject({ file_name: 'Справка МГТУ.pdf' });
   });
 
-  it('без справки итог «Нужно уточнить» с понятной причиной, со справкой — без этого предупреждения', async () => {
+  it('без справки — только предупреждение; итог и готовность к выгрузке те же, что со справкой', async () => {
     const run = async (withCertificate: boolean) => {
       const userId = await createUser(db.sql);
       if (withCertificate) {
@@ -267,13 +267,15 @@ describe('справка об обучении: обязательна для п
     const without = await run(false);
     expect(without.status).toBe('COMPLETED');
     if (without.status !== 'COMPLETED') return;
-    expect(without.eligibility_status).toBe('NEEDS_CLARIFICATION');
     expect(without.warnings.join(' ')).toContain('Справка об обучении в вузе не загружена');
-    expect(without.checklist.join(' ')).toContain('Загрузить в профиль справку');
+    expect(without.checklist.join(' ')).toContain('официальном бланке вуза');
 
     const withCert = await run(true);
     if (withCert.status !== 'COMPLETED') throw new Error('expected COMPLETED');
     expect(withCert.warnings.join(' ')).not.toContain('Справка об обучении');
+    // Справка — предупреждение для подачи, а не блокер паспорта: итог и выгрузка от неё не зависят.
+    expect(without.eligibility_status).toBe(withCert.eligibility_status);
+    expect(without.export_ready).toBe(withCert.export_ready);
     expect(withCert.checklist.join(' ')).toContain('Проверить загруженную справку');
   });
 });
