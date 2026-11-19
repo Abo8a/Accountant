@@ -1,4 +1,5 @@
-// Вход по коду из письма: клиент к маршрутам /auth/* бэкенда. Сессия — httpOnly cookie, фронт её не читает.
+// Вход и регистрация: клиент к маршрутам /auth/* бэкенда. Сессия — httpOnly cookie, фронт её не читает.
+// Пользователь: регистрация — почта + код из письма + пароль, дальше вход — почта + пароль. Админ — почта + код.
 import { env } from '../config/env';
 
 export type AuthPurpose = 'user' | 'admin';
@@ -35,17 +36,36 @@ export async function requestCode(email: string, purpose: AuthPurpose = 'user'):
   }
 }
 
-/** Подтверждает код. При успехе сервер ставит cookie сессии. */
-export async function verifyCode(email: string, code: string, purpose: AuthPurpose = 'user'): Promise<AuthResult<CurrentUser>> {
+function userFrom(status: number, json: Record<string, unknown>): AuthResult<CurrentUser> {
+  if (status === 200 && json.status === 'OK') {
+    return { ok: true, value: { userId: String(json.userId), email: String(json.email), role: String(json.role) } };
+  }
+  return { ok: false, message: typeof json.message === 'string' ? json.message : FALLBACK_ERROR };
+}
+
+/**
+ * Подтверждает код. При успехе сервер ставит cookie сессии.
+ * Для пользователя (purpose = 'user') передаётся пароль: так регистрируются и меняют забытый пароль.
+ */
+export async function verifyCode(
+  email: string,
+  code: string,
+  purpose: AuthPurpose = 'user',
+  password?: string,
+): Promise<AuthResult<CurrentUser>> {
   try {
-    const { status, json } = await post('/code/verify', { email, code, purpose });
-    if (status === 200 && json.status === 'OK') {
-      return {
-        ok: true,
-        value: { userId: String(json.userId), email: String(json.email), role: String(json.role) },
-      };
-    }
-    return { ok: false, message: typeof json.message === 'string' ? json.message : FALLBACK_ERROR };
+    const { status, json } = await post('/code/verify', password === undefined ? { email, code, purpose } : { email, code, purpose, password });
+    return userFrom(status, json);
+  } catch {
+    return { ok: false, message: FALLBACK_ERROR };
+  }
+}
+
+/** Вход по почте и паролю, без кода. При успехе сервер ставит cookie сессии. */
+export async function loginWithPassword(email: string, password: string): Promise<AuthResult<CurrentUser>> {
+  try {
+    const { status, json } = await post('/login', { email, password });
+    return userFrom(status, json);
   } catch {
     return { ok: false, message: FALLBACK_ERROR };
   }

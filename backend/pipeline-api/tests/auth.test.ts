@@ -1,4 +1,4 @@
-// Вход и регистрация по коду: аккаунт создаётся при первом подтверждении, админ — только существующий admin.
+// Регистрация: почта + код из письма + пароль; дальше вход по почте и паролю без кода. Админ — только существующий admin, по коду.
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createPipelineServer } from '../src/server';
 import { AuthService, CODE_COOLDOWN_MS } from '../src/auth/service';
@@ -16,6 +16,8 @@ class CaptureMail implements MailPort {
     return m[1]!;
   }
 }
+
+const PASSWORD = 'correct-horse-1';
 
 let db: TestDb;
 let mail: CaptureMail;
@@ -58,7 +60,7 @@ describe('вход по коду: регистрация и вход польз�
     expect(mail.sent).toHaveLength(1);
     expect(mail.sent[0]!.to).toBe(email);
 
-    const res = await post('/auth/code/verify', { email, code: mail.lastCode() });
+    const res = await post('/auth/code/verify', { email, code: mail.lastCode(), password: PASSWORD });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { status: string; role: string; email: string; userId: string };
     expect(body).toMatchObject({ status: 'OK', role: 'user', email });
@@ -72,7 +74,7 @@ describe('вход по коду: регистрация и вход польз�
   it('cookie сессии открывает /auth/me, без неё — 401; после выхода сессия закрыта', async () => {
     const email = 'session.user@example.com';
     await post('/auth/code/request', { email });
-    const verify = await post('/auth/code/verify', { email, code: mail.lastCode() });
+    const verify = await post('/auth/code/verify', { email, code: mail.lastCode(), password: PASSWORD });
     const cookie = verify.headers.get('set-cookie')!.split(';')[0]!;
 
     const me = await fetch(`${base}/auth/me`, { headers: { cookie } });
@@ -92,11 +94,11 @@ describe('вход по коду: регистрация и вход польз�
     const wrong = real === '000000' ? '111111' : '000000';
 
     for (let i = 0; i < 5; i++) {
-      const res = await post('/auth/code/verify', { email, code: wrong });
+      const res = await post('/auth/code/verify', { email, code: wrong, password: PASSWORD });
       expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({ code: 'INVALID_CODE' });
     }
-    const blocked = await post('/auth/code/verify', { email, code: real });
+    const blocked = await post('/auth/code/verify', { email, code: real, password: PASSWORD });
     expect(blocked.status).toBe(429);
     expect(await blocked.json()).toMatchObject({ code: 'TOO_MANY_ATTEMPTS' });
   });
@@ -106,7 +108,7 @@ describe('вход по коду: регистрация и вход польз�
     await post('/auth/code/request', { email });
     const code = mail.lastCode();
     later(11 * 60 * 1000);
-    const res = await post('/auth/code/verify', { email, code });
+    const res = await post('/auth/code/verify', { email, code, password: PASSWORD });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: 'CODE_EXPIRED' });
   });
@@ -128,6 +130,121 @@ describe('вход по коду: регистрация и вход польз�
   });
 });
 
+describe('пароль: регистрация с паролем и вход по почте и паролю без кода', () => {
+  async function register(email: string, password = PASSWORD): Promise<string> {
+    await post('/auth/code/request', { email });
+    const res = await post('/auth/code/verify', { email, code: mail.lastCode(), password });
+    expect(res.status).toBe(200);
+    return res.headers.get('set-cookie')!.split(';')[0]!;
+  }
+
+  it('пароль сохраняется хешем, в открытом виде его в базе нет', async () => {
+    await register('hash.check@example.com');
+    const { rows } = await db.sql.query(
+      `SELECT pw.password_hash FROM auth_passwords pw JOIN app_profiles p ON p.id = pw.user_id WHERE p.email = 'hash.check@example.com'`,
+    );
+    expect(rows).toHaveLength(1);
+    expect(String(rows[0]!.password_hash)).toMatch(/^scrypt\$/);
+    expect(String(rows[0]!.password_hash)).not.toContain(PASSWORD);
+  });
+
+  it('слишком короткий пароль при регистрации: 400, код не сгорает и подходит со вторым вводом', async () => {
+    const email = 'weak@example.com';
+    await post('/auth/code/request', { email });
+    const code = mail.lastCode();
+    const weak = await post('/auth/code/verify', { email, code, password: '1234567' });
+    expect(weak.status).toBe(400);
+    expect(await weak.json()).toMatchObject({ code: 'WEAK_PASSWORD' });
+    const missing = await post('/auth/code/verify', { email, code });
+    expect(missing.status).toBe(400);
+    expect((await db.sql.query("SELECT 1 FROM app_profiles WHERE email = 'weak@example.com'")).rows).toHaveLength(0);
+
+    const ok = await post('/auth/code/verify', { email, code, password: PASSWORD });
+    expect(ok.status).toBe(200);
+  });
+
+  it('после регистрации вход идёт по почте и паролю, письмо с кодом не отправляется', async () => {
+    const email = 'return@example.com';
+    await register(email);
+    mail.sent = [];
+
+    const res = await post('/auth/login', { email: ' Return@Example.com ', password: PASSWORD });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: 'OK', email, role: 'user' });
+    const cookie = res.headers.get('set-cookie')!.split(';')[0]!;
+    expect(cookie).toMatch(/^buha_session=/);
+    expect(mail.sent).toHaveLength(0);
+
+    const me = await fetch(`${base}/auth/me`, { headers: { cookie } });
+    expect(me.status).toBe(200);
+  });
+
+  it('неверный пароль и неизвестная почта дают один и тот же ответ', async () => {
+    await register('known@example.com');
+    const wrong = await post('/auth/login', { email: 'known@example.com', password: 'wrong-password' });
+    const unknown = await post('/auth/login', { email: 'nobody@example.com', password: PASSWORD });
+    expect(wrong.status).toBe(401);
+    expect(unknown.status).toBe(401);
+    const a = await wrong.json();
+    const b = await unknown.json();
+    expect(a).toEqual(b);
+    expect(a).toMatchObject({ code: 'INVALID_CREDENTIALS', message: 'Неверная почта или пароль' });
+    expect(wrong.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('после 10 неверных попыток вход по этой почте закрыт на время, потом снова открыт', async () => {
+    const email = 'lock@example.com';
+    await register(email);
+    for (let i = 0; i < 10; i++) {
+      expect((await post('/auth/login', { email, password: `wrong-pass-${i}` })).status).toBe(401);
+    }
+    const locked = await post('/auth/login', { email, password: PASSWORD });
+    expect(locked.status).toBe(429);
+    expect(await locked.json()).toMatchObject({ code: 'TOO_MANY_ATTEMPTS' });
+
+    later(16 * 60 * 1000);
+    expect((await post('/auth/login', { email, password: PASSWORD })).status).toBe(200);
+  });
+
+  it('забаненный аккаунт с верным паролем не входит', async () => {
+    const email = 'banned@example.com';
+    await register(email);
+    await db.sql.query("UPDATE app_profiles SET is_banned = true WHERE email = $1", [email]);
+    const res = await post('/auth/login', { email, password: PASSWORD });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'BANNED' });
+  });
+
+  it('админ не входит по паролю на пользовательском входе: только по коду админа', async () => {
+    const email = 'admin.pw@example.com';
+    await register(email);
+    await db.sql.query("UPDATE app_profiles SET role = 'admin' WHERE email = $1", [email]);
+    const res = await post('/auth/login', { email, password: PASSWORD });
+    expect(res.status).toBe(401);
+  });
+
+  it('забытый пароль: код из письма + новый пароль меняют пароль и закрывают старые сессии', async () => {
+    const email = 'forgot@example.com';
+    const oldCookie = await register(email);
+
+    later(CODE_COOLDOWN_MS + 1000);
+    await post('/auth/code/request', { email });
+    const res = await post('/auth/code/verify', { email, code: mail.lastCode(), password: 'brand-new-pass-2' });
+    expect(res.status).toBe(200);
+
+    expect((await post('/auth/login', { email, password: PASSWORD })).status).toBe(401);
+    expect((await post('/auth/login', { email, password: 'brand-new-pass-2' })).status).toBe(200);
+    expect((await fetch(`${base}/auth/me`, { headers: { cookie: oldCookie } })).status).toBe(401);
+  });
+
+  it('аккаунт без пароля (создан до паролей) входит только через «забыли пароль»', async () => {
+    const email = 'legacy@example.com';
+    await register(email);
+    await db.sql.query("DELETE FROM auth_passwords WHERE user_id = (SELECT id FROM app_profiles WHERE email = $1)", [email]);
+    expect((await post('/auth/login', { email, password: PASSWORD })).status).toBe(401);
+  });
+});
+
 describe('вход администратора: только существующий admin, создать админа через API нельзя', () => {
   it('для обычного пользователя код admin не отправляется и аккаунт не появляется', async () => {
     const res = await post('/auth/code/request', { email: 'intruder@example.com', purpose: 'admin' });
@@ -142,7 +259,7 @@ describe('вход администратора: только существую
   it('админ (роль выдана вручную в БД) получает код admin и входит', async () => {
     const email = 'boss@example.com';
     await post('/auth/code/request', { email }); // сначала регистрируется как обычный пользователь
-    await post('/auth/code/verify', { email, code: mail.lastCode() });
+    await post('/auth/code/verify', { email, code: mail.lastCode(), password: PASSWORD });
     await db.sql.query("UPDATE app_profiles SET role = 'admin' WHERE email = $1", [email]); // ручное назначение
 
     mail.sent = [];
@@ -158,7 +275,7 @@ describe('вход администратора: только существую
   it('код пользователя нельзя использовать для входа админа (purpose разделён)', async () => {
     const email = 'split@example.com';
     await post('/auth/code/request', { email });
-    await post('/auth/code/verify', { email, code: mail.lastCode() });
+    await post('/auth/code/verify', { email, code: mail.lastCode(), password: PASSWORD });
     await db.sql.query("UPDATE app_profiles SET role = 'admin' WHERE email = $1", [email]);
 
     await post('/auth/code/request', { email }); // код для purpose=user — не вход админа
@@ -170,7 +287,7 @@ describe('вход администратора: только существую
   it('роль нельзя поднять через пользовательские маршруты', async () => {
     const email = 'escalate@example.com';
     await post('/auth/code/request', { email });
-    const verify = await post('/auth/code/verify', { email, code: mail.lastCode() });
+    const verify = await post('/auth/code/verify', { email, code: mail.lastCode(), password: PASSWORD });
     const cookie = verify.headers.get('set-cookie')!.split(';')[0]!;
     // Тело запроса профиля не должно влиять на роль: маршрута для смены роли нет вовсе.
     const res = await post('/profile', { user_id: (await verify.json() as { userId: string }).userId, role: 'admin', founder: { full_name: 'Иван' } }, { cookie });
@@ -184,7 +301,7 @@ describe('защита маршрутов сессией: user_id берётся
   // Вход пользователя по коду: возвращает cookie сессии и id аккаунта.
   async function login(email: string): Promise<{ cookie: string; userId: string }> {
     await post('/auth/code/request', { email });
-    const res = await post('/auth/code/verify', { email, code: mail.lastCode() });
+    const res = await post('/auth/code/verify', { email, code: mail.lastCode(), password: PASSWORD });
     const body = (await res.json()) as { userId: string };
     return { cookie: res.headers.get('set-cookie')!.split(';')[0]!, userId: body.userId };
   }

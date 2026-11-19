@@ -1,4 +1,5 @@
 import { Link, Outlet } from 'react-router-dom';
+import { useSignOut } from '../auth/useSession';
 import { Logo } from '../ui/Logo/Logo';
 import { SideNav, type SideNavItem } from '../ui/SideNav/SideNav';
 import './AdminLayout.css';
@@ -12,6 +13,7 @@ export const ADMIN_NAV: SideNavItem[] = [
 ];
 
 export function AdminLayout() {
+  const signOut = useSignOut('/auth');
   return (
     <div className="admin">
       <aside className="admin__aside">
@@ -21,7 +23,7 @@ export function AdminLayout() {
 
         <div className="admin__footer">
           <span className="admin__role">Админ</span>
-          <Link to="/auth" className="admin__logout">Выйти</Link>
+          <Link to="/auth" className="admin__logout" onClick={signOut}>Выйти</Link>
         </div>
       </aside>
 

@@ -5,6 +5,7 @@ import { NavIcon } from '../ui/NavIcon/NavIcon';
 import type { SideNavItem } from '../ui/SideNav/SideNav';
 import '../ui/SideNav/SideNav.css';
 import { env } from '../config/env';
+import { useSignOut } from '../auth/useSession';
 import { useCabinetState } from '../state/cabinet';
 import { liveShell } from '../state/cabinetView';
 import './CabinetLayout.css';
@@ -122,6 +123,7 @@ export function CabinetLayout({
   gapsCount,
 }: CabinetLayoutProps = {}) {
   const { pathname } = useLocation();
+  const signOut = useSignOut('/');
   const [overrides, setOverrides] = useState<Partial<CabinetShellSettings>>({});
   const setShell = useCallback<ShellSetter>((patch) => setOverrides(patch), []);
   const contextValue = useMemo(() => setShell, [setShell]);
@@ -183,7 +185,7 @@ export function CabinetLayout({
           <div className="cabinet__user">
             <span className="cabinet__avatar" aria-hidden="true">{u.initials}</span>
             <span className="cabinet__user-name">{u.name}</span>
-            <Link to="/" className="cabinet__logout">Выйти</Link>
+            <Link to="/" className="cabinet__logout" onClick={signOut}>Выйти</Link>
           </div>
         </aside>
 

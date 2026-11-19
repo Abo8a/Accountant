@@ -74,7 +74,7 @@ export interface PipelineServerOptions {
   sharedSecret?: string;
   support?: SupportOptions;
   chat?: ChatOptions;
-  /** Вход по коду из письма (/auth/*). Без него маршруты входа не подключены. */
+  /** Вход и регистрация (/auth/*). Без него маршруты входа не подключены. */
   auth?: AuthHttpOptions;
   /** Папка загрузок материалов проекта (общий том с парсером). Без неё маршруты /pipeline/files не подключены. */
   uploadDir?: string;
@@ -89,7 +89,7 @@ export function createPipelineServer(deps: PipelineDeps, opts: PipelineServerOpt
         return send(res, 200, { status: 'ok' });
       }
 
-      // Вход по коду из письма: без общего секрета (это публичные маршруты).
+      // Вход и регистрация: без общего секрета (это публичные маршруты).
       if (opts.auth && pathname.startsWith('/auth/') && (await handleAuthRequest(req, res, pathname, opts.auth))) {
         return;
       }
