@@ -146,25 +146,39 @@ describe('Brief', () => {
   });
 
   describe('тариф «Базовый»', () => {
-    it('вместо зоны загрузки показывает пейволл с переходом к тарифу; анкета доступна', async () => {
+    it('загрузка открыта: зона загрузки с лимитом 5 файлов, пейволла нет, анкета доступна', async () => {
       const user = userEvent.setup();
       renderBrief();
       await user.click(screen.getByRole('button', { name: 'Базовый' }));
 
       expect(screen.getByRole('button', { name: 'Базовый' })).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.queryByRole('button', { name: /Перетащите файлы сюда/ })).not.toBeInTheDocument();
-      expect(screen.getByRole('heading', { level: 2, name: 'Разбор документов — на тарифе «Профессиональный»' })).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Подключить за 990 ₽' })).toHaveAttribute('href', '/billing');
+      expect(screen.getByRole('button', { name: /Перетащите файлы сюда/ })).toHaveTextContent('PDF, DOCX, PPTX, сканы — до 5 файлов');
+      expect(screen.queryByRole('heading', { level: 2, name: 'Разбор документов — на тарифе «Профессиональный»' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Подключить за 990 ₽' })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'У меня нет файлов' })).toBeInTheDocument();
     });
 
-    it('в анкете на Базовом нет ссылки «Нашлись файлы?»', async () => {
+    it('на «Профи» в подсказке зоны загрузки — до 10 файлов', () => {
+      renderBrief();
+      expect(screen.getByRole('button', { name: /Перетащите файлы сюда/ })).toHaveTextContent('PDF, DOCX, PPTX, сканы — до 10 файлов');
+    });
+
+    it('ветка «файлы»: счётчик считает от лимита 5', async () => {
+      const user = userEvent.setup();
+      renderBrief();
+      await user.click(screen.getByRole('button', { name: 'Базовый' }));
+      await user.click(screen.getByRole('button', { name: /Перетащите файлы сюда/ }));
+      expect(screen.getByRole('heading', { level: 1, name: 'Материалы загружены' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Добавить ещё файл/ })).toHaveTextContent('· использовано 2 из 5');
+    });
+
+    it('в анкете на Базовом есть ссылка «Нашлись файлы? Загрузить» и она возвращает к загрузке', async () => {
       const user = userEvent.setup();
       renderBrief();
       await user.click(screen.getByRole('button', { name: 'Базовый' }));
       await user.click(screen.getByRole('button', { name: 'У меня нет файлов' }));
-      expect(screen.queryByRole('button', { name: 'Нашлись файлы? Загрузить' })).not.toBeInTheDocument();
-      expect(screen.getByText(/Отвечайте как получится, коротко/)).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Нашлись файлы? Загрузить' }));
+      expect(screen.getByRole('heading', { level: 1, name: 'Есть материалы о проекте?' })).toBeInTheDocument();
     });
   });
 });

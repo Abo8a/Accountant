@@ -14,7 +14,7 @@ describe('PlansModal', () => {
     expect(items).toHaveLength(3);
     expect(within(items[0]).getByRole('heading', { level: 3, name: 'Базовый' })).toBeInTheDocument();
     expect(items[0]).toHaveTextContent('0 ₽');
-    expect(items[0]).toHaveTextContent('Паспорт, анкета, стоп-факторы и экспорт. Без загрузки файлов и проверки новизны.');
+    expect(items[0]).toHaveTextContent('Паспорт, анкета, стоп-факторы и экспорт. До 5 файлов, без проверки новизны.');
 
     expect(within(items[1]).getByRole('heading', { level: 3, name: 'Профессиональный' })).toBeInTheDocument();
     expect(items[1]).toHaveTextContent('990 ₽');

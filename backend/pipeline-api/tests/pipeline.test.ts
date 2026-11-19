@@ -225,13 +225,49 @@ describe('пайплайн v1.0', () => {
     expect(res).toMatchObject({ status: 'ERROR', code: 'FOUNDER_REQUIRED' });
   });
 
-  it('файлы на базовом тарифе: PLAN_UPGRADE_REQUIRED', async () => {
+  const fakeFiles = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      file_name: `f${i}.pdf`,
+      file_url: `file:///f${i}.pdf`,
+      sha256_hash: String(i).padStart(64, '0'),
+    }));
+
+  it('базовый тариф: загрузка доступна, до 5 файлов за раз', async () => {
     const userId = await createUser(db.sql, { plan: 'free' });
+    const text = 'Проблема: студенты тратят время на поиск попутчиков в чатах каждую неделю.';
+    const sha = createHash('sha256').update('free-doc').digest('hex');
+    const parser = new FakeParser({
+      'file:///free.pdf': {
+        sha256_hash: sha,
+        extracted_text: text,
+        metadata: { total_pages: 1, pages: [{ page: 1, text, char_start: 0, char_end: text.length }] },
+      },
+    });
     const res = await handlePipeline(
-      makeDeps(db),
-      req(userId, { files: [{ file_name: 'a.pdf', file_url: 'file:///a.pdf', sha256_hash: 'a'.repeat(64) }] }),
+      makeDeps(db, new FakeLlm(), parser),
+      req(userId, { files: [{ file_name: 'free.pdf', file_url: 'file:///free.pdf', sha256_hash: sha }] }),
     );
-    expect(res).toMatchObject({ status: 'ERROR', code: 'PLAN_UPGRADE_REQUIRED' });
+    expect(res.status).toBe('NEED_USER_INPUT');
+  });
+
+  it('базовый тариф: шестой файл не принимается — FILE_QUOTA_EXCEEDED, ровно пять проходят проверку квоты', async () => {
+    const userId = await createUser(db.sql, { plan: 'free' });
+    const over = await handlePipeline(makeDeps(db), req(userId, { files: fakeFiles(6) }));
+    expect(over).toMatchObject({ status: 'ERROR', code: 'FILE_QUOTA_EXCEEDED' });
+    const ok = await handlePipeline(makeDeps(db), req(userId, { files: fakeFiles(5) }));
+    expect(ok).not.toMatchObject({ code: 'FILE_QUOTA_EXCEEDED' });
+    expect(ok).not.toMatchObject({ code: 'PLAN_UPGRADE_REQUIRED' });
+  });
+
+  it('если админ выключил разбор документов на тарифе: PLAN_UPGRADE_REQUIRED', async () => {
+    const userId = await createUser(db.sql, { plan: 'free' });
+    await db.sql.query(`UPDATE billing_plans SET features = features || '{"ai_parsing": false}'::jsonb WHERE id = 'free'`);
+    try {
+      const res = await handlePipeline(makeDeps(db), req(userId, { files: fakeFiles(1) }));
+      expect(res).toMatchObject({ status: 'ERROR', code: 'PLAN_UPGRADE_REQUIRED' });
+    } finally {
+      await db.sql.query(`UPDATE billing_plans SET features = features || '{"ai_parsing": true}'::jsonb WHERE id = 'free'`);
+    }
   });
 
   it('файл: парсинг, проверка sha256, источник и дедуп повторной загрузки', async () => {

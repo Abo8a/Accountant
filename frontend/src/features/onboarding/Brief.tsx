@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BrandMark } from '../../shared/ui/Logo/Logo';
 import { env } from '../../shared/config/env';
+import { getPlan } from '../../shared/data/plans';
 import { loadFlow, saveFlow } from '../../shared/state/flow';
 import { OnboardingHeader } from './OnboardingHeader';
 import { ConsultantWidget } from '../consultant/ConsultantWidget';
@@ -9,7 +10,8 @@ import './common.css';
 import './Brief.css';
 
 // Стартовый бриф — design/project/Brief.dc.html. Три состояния: «есть файлы?» (ask),
-// «Материалы загружены» (files) и анкета (form). Тариф «Базовый» закрывает загрузку пейволлом.
+// «Материалы загружены» (files) и анкета (form). Загрузка открыта на любом тарифе: «Базовый» — до 5 файлов,
+// «Профессиональный» — до 10 (в эталоне у «Базового» был пейволл — политика тарифов изменена по решению владельца).
 
 type Step = 'ask' | 'files' | 'form';
 type Plan = 'free' | 'pro';
@@ -29,8 +31,6 @@ const INITIAL_FILES: UploadedFile[] = [
   { id: 'f3', name: 'Monetrix_presentation_02.11 (1).pdf', meta: 'Этот файл уже загружен — повторно не разбираем и в лимит не считаем', kind: 'duplicate' },
 ];
 
-const FILE_LIMIT = 10;
-
 const QUESTIONS = [
   { id: 'q1', n: 1, q: 'Какую проблему решает проект и для кого?', ex: 'Сведения о мерах поддержки распределены между разными источниками; пользователю трудно собрать последовательность действий.' },
   { id: 'q2', n: 2, q: 'Что делает продукт?', ex: 'Единый профиль потребности, проверяемый справочник, подготовка черновика обращения и передача сложного вопроса координатору.' },
@@ -48,9 +48,10 @@ export function Brief() {
   const [files, setFiles] = useState<UploadedFile[]>(INITIAL_FILES);
 
   const free = plan === 'free';
-  // На Базовом тарифе ветки «файлы» нет: показываем вопрос.
-  const current: Step = free && step === 'files' ? 'ask' : step;
-  const canUpload = !free && !env.liveApi;
+  // Загрузка доступна на любом тарифе; различается только лимит файлов (Базовый — 5, Профессиональный — 10).
+  const fileLimit = getPlan(plan).file_uploads_limit;
+  const current: Step = step;
+  const canUpload = !env.liveApi;
   const used = files.filter((f) => f.kind !== 'duplicate').length;
   const submitLabel = current === 'files' ? 'Собрать паспорт по файлам' : 'Собрать паспорт';
 
@@ -118,22 +119,8 @@ export function Brief() {
                     <span className="brief-drop__or">
                       или <span className="brief-drop__link">загрузите с устройства</span>
                     </span>
-                    <span className="brief-drop__hint">PDF, DOCX, PPTX, сканы — до 10 файлов</span>
+                    <span className="brief-drop__hint">PDF, DOCX, PPTX, сканы — до {fileLimit} файлов</span>
                   </button>
-                )}
-
-                {free && (
-                  <div className="brief-locked">
-                    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#C2410C" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <rect x="4" y="10" width="16" height="11" rx="2" />
-                      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-                    </svg>
-                    <h2 className="brief-locked__title">Разбор документов — на тарифе «Профессиональный»</h2>
-                    <p className="brief-locked__text">Буха прочитает презентацию, найдёт факты и привяжет каждый к странице. На Базовом тарифе паспорт собирается по анкете.</p>
-                    <Link to="/billing" className="brief-locked__cta">
-                      Подключить за 990 ₽
-                    </Link>
-                  </div>
                 )}
 
                 <aside className="brief-aside">
@@ -168,7 +155,7 @@ export function Brief() {
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C2410C" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                     <path d="M12 5v14M5 12h14" />
                   </svg>
-                  Добавить ещё файл <span className="brief-files__count">· использовано {used} из {FILE_LIMIT}</span>
+                  Добавить ещё файл <span className="brief-files__count">· использовано {used} из {fileLimit}</span>
                 </button>
               </section>
             </>

@@ -73,6 +73,20 @@ describe('Pricing (тарифы)', () => {
     expect(within(table).getByRole('rowheader', { name: 'Файлов в проекте' })).toBeInTheDocument();
   });
 
+  it('«Базовый» теперь с загрузкой документов: пункт на карточке и «5» файлов в таблице', () => {
+    renderPricing();
+    expect(screen.getByText('Загрузка документов — до 5 файлов')).toBeInTheDocument();
+
+    const table = screen.getByRole('table');
+    const cellsOf = (feature: string) =>
+      within(within(table).getByRole('rowheader', { name: feature }).closest('tr') as HTMLElement)
+        .getAllByRole('cell')
+        .map((td) => td.textContent);
+    expect(cellsOf('Файлов в проекте')).toEqual(['5', '10', '50']);
+    expect(cellsOf('Разбор документов ИИ (PDF, DOCX, PPTX, сканы)')).toEqual(['Да', 'Да', 'Да']);
+    expect(cellsOf('Проверка научно-технической новизны')).toEqual(['Нет', 'Да', 'Да']);
+  });
+
   it('страница без подвала, как в эталоне', () => {
     renderPricing();
     expect(screen.queryByText('© 2026 Буха. Независимый сервис, не связан с ФСИ.')).not.toBeInTheDocument();

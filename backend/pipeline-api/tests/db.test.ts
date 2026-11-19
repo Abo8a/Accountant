@@ -1,5 +1,8 @@
 // Проверка SQL-логики ТЗ (триггеры и функции) на реальном движке Postgres (PGlite).
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { SUPABASE_DIR } from '../src/config';
 import { createTestDb, createUser, type TestDb } from './helpers';
 
 describe('миграции и триггеры ТЗ v1.8', () => {
@@ -29,6 +32,45 @@ describe('миграции и триггеры ТЗ v1.8', () => {
     expect(rows[0].role).toBe('user');
     expect(rows[0].is_banned).toBe(false);
     expect(rows[0].founder_data.name).toBe('Тест');
+  });
+
+  it('seed тарифов: «Базовый» — до 5 файлов и разбор документов, «Профессиональный» — 10, «Премиум» — 50', async () => {
+    const { rows } = await db.sql.query(
+      `SELECT id, file_uploads_limit, features FROM billing_plans ORDER BY file_uploads_limit`,
+    );
+    expect(rows.map((r) => [r.id, r.file_uploads_limit, r.features.ai_parsing])).toEqual([
+      ['free', 5, true],
+      ['pro', 10, true],
+      ['premium', 50, true],
+    ]);
+    expect(rows[0].features.novelty_check).toBe(false);
+  });
+
+  it('миграция 0012: переводит старый free (0 файлов) на 5 один раз и не перезаписывает правки админа', async () => {
+    const migration = readFileSync(join(SUPABASE_DIR, 'migrations', '0012_free_plan_uploads.sql'), 'utf8');
+    const free = async () =>
+      (await db.sql.query(`SELECT file_uploads_limit AS n, features FROM billing_plans WHERE id = 'free'`)).rows[0];
+    try {
+      // Развёрнутая база до изменения: free без загрузки, отметки о миграции нет.
+      await db.sql.query(
+        `UPDATE billing_plans SET file_uploads_limit = 0, features = features || '{"ai_parsing": false}'::jsonb WHERE id = 'free'`,
+      );
+      await db.sql.query(`DELETE FROM app_data_migrations WHERE name = '0012_free_plan_uploads'`);
+
+      await db.sql.exec(migration);
+      expect(await free()).toMatchObject({ n: 5, features: { ai_parsing: true, novelty_check: false } });
+
+      // Админ снова выключил загрузку; следующий деплой повторно прогоняет миграцию — она ничего не меняет.
+      await db.sql.query(
+        `UPDATE billing_plans SET file_uploads_limit = 0, features = features || '{"ai_parsing": false}'::jsonb WHERE id = 'free'`,
+      );
+      await db.sql.exec(migration);
+      expect(await free()).toMatchObject({ n: 0, features: { ai_parsing: false } });
+    } finally {
+      await db.sql.query(
+        `UPDATE billing_plans SET file_uploads_limit = 5, features = features || '{"ai_parsing": true}'::jsonb WHERE id = 'free'`,
+      );
+    }
   });
 
   it('singleton app_settings: нельзя создать вторую строку', async () => {

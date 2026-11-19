@@ -153,7 +153,7 @@ describe('Billing: флаг HIDE_PAYMENT_GATEWAY = TRUE (по умолчанию
   it('окончание подписки (free): текущий тариф «Базовый», блока файлов и продления нет, в «Других тарифах» Профессиональный и Премиум с «Улучшить»', () => {
     render(<Billing currentPlan="free" />);
     expect(screen.getByRole('heading', { level: 2, name: 'Базовый' })).toBeInTheDocument();
-    expect(screen.getByText('Паспорт, анкета, стоп-факторы и экспорт. Без загрузки файлов и проверки новизны.')).toBeInTheDocument();
+    expect(screen.getByText('Паспорт, анкета, стоп-факторы и экспорт. До 5 файлов, без проверки новизны.')).toBeInTheDocument();
     expect(screen.queryByText('Файлы: 3 из 10')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Продлить' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 3, name: 'Базовый' })).not.toBeInTheDocument();

@@ -36,7 +36,7 @@ export interface BillingProps {
 
 const BASIC = {
   name: 'Базовый',
-  description: 'Паспорт, анкета, стоп-факторы и экспорт. Без загрузки файлов и проверки новизны.',
+  description: getPlan('free').description,
   price: '0 ₽',
 };
 

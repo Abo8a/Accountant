@@ -16,7 +16,9 @@ function filesOf(count: number): ProjectFile[] {
 }
 
 describe('Files.model: тарифы и лимиты', () => {
-  it('лимит файлов берётся из данных тарифа: 10 на «Профессиональном», 50 на «Премиуме»', () => {
+  it('лимит файлов берётся из данных тарифа: 5 на «Базовом», 10 на «Профессиональном», 50 на «Премиуме»', () => {
+    expect(filesPlan('free').file_uploads_limit).toBe(5);
+    expect(filesPlan('free').features.ai_parsing).toBe(true);
     expect(filesPlan('pro').file_uploads_limit).toBe(10);
     expect(filesPlan('premium').file_uploads_limit).toBe(50);
   });

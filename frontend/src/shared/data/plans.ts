@@ -28,11 +28,11 @@ export const PLANS: readonly Plan[] = [
     name: 'Базовый',
     price_rub: 0,
     duration_days: 30,
-    file_uploads_limit: 0,
+    file_uploads_limit: 5,
     renewal_discount_percent: 0,
-    features: { ai_parsing: false, novelty_check: false, consultant: false },
+    features: { ai_parsing: true, novelty_check: false, consultant: false },
     // временный текст, подменяется данными админки
-    description: 'Паспорт, анкета, стоп-факторы и экспорт. Без загрузки файлов и проверки новизны.',
+    description: 'Паспорт, анкета, стоп-факторы и экспорт. До 5 файлов, без проверки новизны.',
   },
   {
     id: 'pro',

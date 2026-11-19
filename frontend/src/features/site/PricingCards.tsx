@@ -58,7 +58,7 @@ export function PricingCards({ period, headingLevel, className }: PricingCardsPr
           <Item>Паспорт по 10 блокам</Item>
           <Item>Анкета и вопросы по пробелам</Item>
           <Item>Проверка стоп-факторов и чек-лист</Item>
-          <Item off>Загрузка документов</Item>
+          <Item>Загрузка документов — до 5 файлов</Item>
         </ul>
         <PillLink to="/auth" variant="outline" size="sm" className="plans__cta">Начать бесплатно</PillLink>
       </div>
