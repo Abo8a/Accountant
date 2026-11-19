@@ -1,0 +1,257 @@
+/* Интерактивная анкета поля паспорта: только токены (новый элемент, в макете его нет). */
+.ff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14);
+}
+
+.ff__group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.ff__label {
+  padding: 0;
+  font-size: var(--fs-14);
+  font-weight: var(--font-semibold);
+  color: var(--color-gray-600);
+}
+
+.ff__optional {
+  font-weight: var(--font-regular);
+  color: var(--color-gray-500);
+}
+
+.ff__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+.ff__choice {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-h-sm);
+  padding: 0 var(--space-14);
+  border: 1px solid var(--color-gray-300);
+  border-radius: var(--radius-pill);
+  background: var(--color-white);
+  font: var(--font-semibold) var(--fs-14) var(--font-sans);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.ff__choice--on {
+  border-color: var(--color-brand);
+  background: var(--color-peach);
+}
+
+.ff__choice:focus-within {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Радио и флажок скрыты визуально: выбор показывает сама плашка. */
+.ff__radio,
+.ff__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.ff__inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+}
+
+.ff__input-wrap {
+  flex: 1 1 160px; /* локальное значение: минимальная ширина короткого поля */
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.ff__input-wrap--wide {
+  flex-basis: 100%;
+}
+
+.ff__input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: var(--control-h-sm);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--color-gray-300);
+  border-radius: var(--radius-input);
+  background: var(--color-white);
+  font: var(--font-regular) var(--fs-15) / var(--lh-text) var(--font-sans);
+  color: var(--color-ink);
+}
+
+.ff__input:focus {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.ff__textarea {
+  resize: vertical;
+}
+
+.ff__table-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+  overflow-x: auto;
+}
+
+.ff__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ff__th {
+  padding: 0 var(--space-6) var(--space-6);
+  text-align: left;
+  font-size: var(--fs-13);
+  font-weight: var(--font-semibold);
+  color: var(--color-gray-600);
+  white-space: nowrap;
+}
+
+/* Короткие колонки (имя, месяцы, статус) — узкие; длинные (роль, опыт, отличие) делят остаток поровну. */
+.ff__th:not(.ff__th--wide):not(.ff__th--action) {
+  width: 26%;
+}
+
+.ff__th--action {
+  width: var(--control-h-sm);
+}
+
+.ff__td {
+  padding: var(--space-4) var(--space-6);
+  vertical-align: top;
+}
+
+.ff__td--action {
+  padding-right: 0;
+}
+
+.ff__remove {
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-pill);
+  background: var(--color-white);
+  font: var(--font-semibold) var(--fs-18) var(--font-sans);
+  color: var(--color-gray-600);
+  cursor: pointer;
+}
+
+.ff__remove:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.ff__add {
+  min-height: var(--control-h-sm);
+  padding: 0 var(--space-14);
+  border: 1px dashed var(--color-gray-300);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  font: var(--font-semibold) var(--fs-14) var(--font-sans);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.ff__cards {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-10);
+}
+
+.ff__card {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-14) var(--space-14);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-input);
+  background: var(--color-gray-50);
+}
+
+.ff__card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ff__card-num {
+  font-size: var(--fs-13);
+  font-weight: var(--font-bold);
+  color: var(--color-gray-500);
+}
+
+.ff__switch {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: var(--font-semibold) var(--fs-14) var(--font-sans);
+  color: var(--color-link);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ff__error {
+  margin: 0;
+  padding: var(--space-10) var(--space-14);
+  border-radius: var(--radius-input);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  font-size: var(--fs-14);
+}
+
+@media (max-width: 640px) {
+  .ff__table,
+  .ff__table tbody,
+  .ff__table tr,
+  .ff__table td {
+    display: block;
+    width: 100%;
+  }
+
+  .ff__table thead {
+    display: none;
+  }
+
+  .ff__table tr {
+    padding: var(--space-8) 0;
+    border-bottom: 1px solid var(--color-gray-200);
+  }
+
+  .ff__table td {
+    box-sizing: border-box;
+    padding: var(--space-4) 0;
+  }
+
+  /* Заголовков колонок на узком экране нет — подпись над каждым полем. */
+  .ff__td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: var(--space-4);
+    font-size: var(--fs-13);
+    font-weight: var(--font-semibold);
+    color: var(--color-gray-600);
+  }
+}

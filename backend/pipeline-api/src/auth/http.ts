@@ -1,4 +1,5 @@
-// HTTP-маршруты входа: POST /auth/code/request, POST /auth/code/verify, GET /auth/me, POST /auth/logout.
+// HTTP-маршруты входа: POST /auth/code/request, POST /auth/code/verify (регистрация/смена пароля/вход админа),
+// POST /auth/login (почта + пароль), GET /auth/me, POST /auth/logout.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { SESSION_TTL_MS, type AuthPurpose, type AuthService, type AuthUser } from './service';
 
@@ -18,6 +19,8 @@ const VERIFY_ERRORS: Record<string, { status: number; message: string }> = {
   TOO_MANY_ATTEMPTS: { status: 429, message: 'Слишком много попыток. Запросите новый код' },
   NOT_ADMIN: { status: 403, message: 'Доступ запрещён' },
   BANNED: { status: 403, message: 'Доступ ограничен' },
+  WEAK_PASSWORD: { status: 400, message: 'Пароль не короче 8 символов' },
+  INVALID_CREDENTIALS: { status: 401, message: 'Неверная почта или пароль' },
 };
 
 function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string | string[]> = {}) {
@@ -109,9 +112,35 @@ export async function handleAuthRequest(
       send(res, 400, { status: 'ERROR', code: 'INVALID_CODE', message: VERIFY_ERRORS.INVALID_CODE.message });
       return true;
     }
-    const result = await service.verifyCode(body.email, body.code, purpose);
+    const password = typeof body.password === 'string' ? body.password : undefined;
+    const result = await service.verifyCode(body.email, body.code, purpose, password);
     if (!result.ok) {
       const err = VERIFY_ERRORS[result.code] ?? { status: 400, message: 'Не удалось войти' };
+      send(res, err.status, { status: 'ERROR', code: result.code, message: err.message });
+      return true;
+    }
+    send(
+      res,
+      200,
+      { status: 'OK', userId: result.userId, email: result.email, role: result.role },
+      { 'Set-Cookie': sessionCookie(result.token, cookieSecure) },
+    );
+    return true;
+  }
+
+  // Вход по почте и паролю — без кода из письма.
+  if (req.method === 'POST' && pathname === '/auth/login') {
+    const body = await readBody(req);
+    if (!body || typeof body.email !== 'string' || typeof body.password !== 'string') {
+      send(res, 400, { status: 'ERROR', code: 'INVALID_CREDENTIALS', message: VERIFY_ERRORS.INVALID_CREDENTIALS.message });
+      return true;
+    }
+    const result = await service.loginWithPassword(body.email, body.password);
+    if (!result.ok) {
+      const err =
+        result.code === 'TOO_MANY_ATTEMPTS'
+          ? { status: 429, message: 'Слишком много попыток. Попробуйте позже' }
+          : (VERIFY_ERRORS[result.code] ?? { status: 401, message: VERIFY_ERRORS.INVALID_CREDENTIALS.message });
       send(res, err.status, { status: 'ERROR', code: result.code, message: err.message });
       return true;
     }

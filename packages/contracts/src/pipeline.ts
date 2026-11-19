@@ -1,7 +1,7 @@
 // Контракт единого Webhook / HTTP-входа пайплайна: POST /pipeline (ТЗ, раздел 3.5).
 // Вопрос 3 (вариант А): фронтенд передаёт target_field и previous_question — бэкенд stateless.
 
-import type { BudgetCategory, ClaimKind, ClaimType, ClaimVerificationStatus } from './enums';
+import type { BudgetCategory, ClaimKind, ClaimOrigin, ClaimType, ClaimVerificationStatus } from './enums';
 
 /**
  * init_or_upload — бриф/файлы (шаги 1–5);
@@ -57,6 +57,12 @@ export interface PipelineRequest {
   eligibility?: EligibilityAnswers; // анкета допуска; нужна, пока проект не прошёл проверку
   form?: FormFieldInput[];          // для submit_form
   budget_items?: BudgetItemInput[]; // для submit_form: смета целиком
+  /** Форма интерактивной анкеты поля, которое сохраняется этим запросом: хранится рядом с текстом (миграция 0016). */
+  field_form?: FieldFormInput;
+}
+
+export interface FieldFormInput extends TargetField {
+  data: Record<string, unknown>;
 }
 
 export type PipelineErrorCode =
@@ -141,6 +147,8 @@ export interface PipelineClaimOut {
   span_end: number | null;
   order_index: number;
   verification_status: ClaimVerificationStatus;
+  /** Чьи слова: студента («с ваших слов») или модели («Дописано ИИ»). */
+  origin: ClaimOrigin;
 }
 
 export interface PipelinePassportField {
@@ -149,6 +157,8 @@ export interface PipelinePassportField {
   value: string | null;
   review_status: string;
   claims: PipelineClaimOut[];
+  /** Форма интерактивной анкеты, из которой сохранён текст поля; нет — поле писали текстом (или текст с тех пор менялся). */
+  form_data?: Record<string, unknown>;
 }
 
 export interface PipelineCompleted {

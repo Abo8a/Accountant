@@ -53,7 +53,7 @@ async function signIn(): Promise<{ cookie: string; userId: string }> {
   const email = `files.${randomUUID()}@example.com`;
   const json = { 'Content-Type': 'application/json' };
   await fetch(`${base}/auth/code/request`, { method: 'POST', headers: json, body: JSON.stringify({ email }) });
-  const res = await fetch(`${base}/auth/code/verify`, { method: 'POST', headers: json, body: JSON.stringify({ email, code: mail.lastCode() }) });
+  const res = await fetch(`${base}/auth/code/verify`, { method: 'POST', headers: json, body: JSON.stringify({ email, code: mail.lastCode(), password: 'test-password-1' }) });
   const body = (await res.json()) as { userId: string };
   return { cookie: res.headers.get('set-cookie')!.split(';')[0]!, userId: body.userId };
 }

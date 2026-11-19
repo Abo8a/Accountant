@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { BudgetItemInput, PipelineClaimOut, PipelinePassportField, PipelineQuestion, PipelineResponse, TargetField } from '@passport/contracts';
+import type { BudgetItemInput, ClaimOrigin, PipelineClaimOut, PipelinePassportField, PipelineQuestion, PipelineResponse, TargetField } from '@passport/contracts';
 import { StatusPill } from '../../shared/ui';
 import { callPassportPipeline } from '../../shared/api/pipeline';
 import { STUDY_CERTIFICATE_ACCEPT, uploadStudyCertificate, type CabinetState } from '../../shared/api/cabinet';
@@ -12,11 +12,11 @@ import { ConsultantWidget } from '../consultant/ConsultantWidget';
 import { BudgetTable } from '../budget/BudgetTable';
 import { AuditRemark } from './AuditRemark';
 import { DirectionChallenge, type DirectionChallengeValue } from './DirectionChallenge';
+import { FieldEditor } from './forms/FieldEditor';
+import { FIELD_FORMS, teamFromData, type FormCtx } from './forms/schemas';
 import {
   ClaimPanel,
   FIELD_CHIP,
-  KIND_CLASS,
-  LEGEND,
   RISKY,
   SECTIONS,
   type ClaimType,
@@ -60,7 +60,17 @@ const FIELD_LABELS: Record<string, string> = {
   active_obligations: 'Действующие обязательства',
 };
 
+/** Три подчёркивания паспорта: чьи слова в тексте и что ещё нужно заполнить. Типы утверждений (документ, план) — в панели справа. */
+const LIVE_LEGEND: { kind: 'user' | 'ai' | 'to-fill'; label: string }[] = [
+  { kind: 'user', label: 'С ваших слов' },
+  { kind: 'ai', label: 'Дописано ИИ' },
+  { kind: 'to-fill', label: 'Заполнить' },
+];
+
+const ORIGIN_LABEL: Record<ClaimOrigin, string> = { user: 'Слова пользователя', ai: 'Дописано ИИ' };
+
 const OPTIONAL = new Set(['4/tech_challenge']);
+const PDF_HINT = 'Выгрузка в PDF пока не готова — скачайте DOCX';
 const CODE_FIELDS = new Set(['4/direction', '4/tech_challenge']);
 
 function visKindOf(c: PipelineClaimOut): VisKind {
@@ -108,7 +118,7 @@ function renderValue(
     const v = visKindOf(c);
     const classes = [
       'passport-claim',
-      KIND_CLASS[v],
+      `passport-claim--${c.origin === 'ai' ? 'ai' : 'user'}`,
       expert && !RISKY[v] ? 'passport-claim--muted' : '',
       expert && RISKY[v] ? 'passport-claim--risk' : '',
       selected === id ? 'passport-claim--selected' : '',
@@ -213,6 +223,8 @@ export function LivePassport() {
   }
 
   const passport = state.passport;
+  // Имена из анкеты команды — подсказки для опыта команды и авторов.
+  const formCtx: FormCtx = { team: teamFromData(passport.find((f) => f.section_id === 2 && f.field_key === 'team_members')?.form_data) };
   const secId = sec === 'budget' ? null : sec;
   const meta = SECTIONS.find((s) => s.id === secId) ?? SECTIONS[0]!;
   const fields = passport.filter((f) => f.section_id === secId);
@@ -256,14 +268,16 @@ export function LivePassport() {
   }
 
   /** Заполненное поле — правка текста (submit_form). Пробел — ответ с проверкой ИИ (submit_answer), как раньше в «Пробелах». */
-  function saveField(f: PipelinePassportField, value: string) {
+  // Анкета (таблица, «да/нет») сохраняется вместе с текстом: ИИ переписывает текст, а форму потом открываем как была.
+  function saveField(f: PipelinePassportField, value: string, form?: Record<string, unknown>) {
     const key = `${f.section_id}/${f.field_key}`;
+    const tf: TargetField = { section_id: f.section_id, field_key: f.field_key };
+    const fieldForm = form ? { field_form: { ...tf, data: form } } : {};
     if (isGap(f)) {
-      const tf: TargetField = { section_id: f.section_id, field_key: f.field_key };
       const asked = question?.target_field?.section_id === f.section_id && question.target_field.field_key === f.field_key ? question.question : undefined;
-      void run(key, () => callPassportPipeline({ action: 'submit_answer', target_field: tf, ...(asked ? { previous_question: asked } : {}), text_input: value }));
+      void run(key, () => callPassportPipeline({ action: 'submit_answer', target_field: tf, ...(asked ? { previous_question: asked } : {}), text_input: value, ...fieldForm }));
     } else {
-      void run(key, () => callPassportPipeline({ action: 'submit_form', form: [{ section_id: f.section_id, field_key: f.field_key, value }] }));
+      void run(key, () => callPassportPipeline({ action: 'submit_form', form: [{ ...tf, value }], ...fieldForm }));
     }
   }
 
@@ -302,7 +316,8 @@ export function LivePassport() {
     setEditing(null);
   };
 
-  const hint = allApproved ? undefined : 'Скачать можно, когда все 10 блоков одобрены';
+  // Скачать можно на любом этапе: незаполненные поля в файле остаются пустыми. PDF-выгрузки пока нет.
+  const docxHint = allApproved ? undefined : 'Паспорт ещё не одобрен целиком: незаполненные поля в файле останутся пустыми';
   const founderRows: [string, string][] = [
     ['ФИО', state.founder.full_name ?? '—'],
     ['Статус обучения', educationLabel(state)],
@@ -327,10 +342,10 @@ export function LivePassport() {
           )}
         </div>
         <div className="passport__actions">
-          <button type="button" className="passport__btn" disabled={!allApproved || busy} title={hint} onClick={() => void onDownload()}>
+          <button type="button" className="passport__btn" disabled={busy} title={docxHint} onClick={() => void onDownload()}>
             DOCX
           </button>
-          <button type="button" className="passport__btn" disabled title={hint}>
+          <button type="button" className="passport__btn" disabled title={PDF_HINT}>
             PDF
           </button>
           <Link to="/result" className="passport__btn-brand">Итог проверки</Link>
@@ -340,7 +355,7 @@ export function LivePassport() {
 
       <div className="passport__bar">
         <ul aria-label="Обозначения" className="passport__legend">
-          {LEGEND.map((item) => (
+          {LIVE_LEGEND.map((item) => (
             <li key={item.kind}>
               <span className={`passport__swatch passport__swatch--${item.kind}`} aria-hidden="true" />
               {item.label}
@@ -463,7 +478,11 @@ export function LivePassport() {
                   </div>
 
                   {!isEditing && filled && <p className="passport__text">{renderValue(f, expert, sel, setSel)}</p>}
-                  {!isEditing && !filled && <p className="passport__note">{OPTIONAL.has(key) ? 'Необязательное поле.' : 'Пока не заполнено.'}</p>}
+                  {!isEditing && !filled && (
+                    <p className="passport__note">
+                      {OPTIONAL.has(key) ? 'Необязательное поле.' : <span className="passport__to-fill">Пока не заполнено.</span>}
+                    </p>
+                  )}
                   {!isEditing && gap && asked?.question && <p className="passport__note">{asked.question}</p>}
 
                   {isEditing && isDirection && (
@@ -484,7 +503,7 @@ export function LivePassport() {
                   )}
 
                   {isEditing && !isDirection && (
-                    <LiveFieldEditor
+                    <FieldEditor
                       inputId={`edit-${f.section_id}-${f.field_key}`}
                       initialText={f.value ?? ''}
                       wasApproved={fs === 'approved'}
@@ -494,7 +513,10 @@ export function LivePassport() {
                       example={gap ? asked?.example : undefined}
                       rejection={rejected[key]}
                       onHelp={gap ? () => setHelpSignal((n) => n + 1) : undefined}
-                      onSave={(text) => saveField(f, text)}
+                      spec={FIELD_FORMS[key]}
+                      formData={f.form_data}
+                      ctx={formCtx}
+                      onSave={(text, form) => saveField(f, text, form)}
                       onCancel={() => setEditing(null)}
                     />
                   )}
@@ -516,7 +538,7 @@ export function LivePassport() {
               source={selectedClaim.source_id ? 'Загруженный документ' : null}
               page={selectedClaim.source_locator?.page ?? null}
               quote={selectedClaim.source_locator?.quote ?? null}
-              origin="Слова пользователя"
+              origin={ORIGIN_LABEL[selectedClaim.origin === 'ai' ? 'ai' : 'user']}
               conf={1}
               onPickType={() => undefined}
               readOnly
@@ -525,53 +547,6 @@ export function LivePassport() {
         </aside>
       </div>
       <ConsultantWidget activeSectionId={secId ?? undefined} openSignal={helpSignal} />
-    </div>
-  );
-}
-
-interface LiveFieldEditorProps {
-  inputId: string;
-  initialText: string;
-  wasApproved: boolean;
-  busy: boolean;
-  /** Вопрос пайплайна к этому полю, критерий фонда и пример (были на экране «Пробелы»). */
-  question?: string;
-  criteria?: string;
-  example?: string;
-  /** Почему ИИ не принял ответ; черновик остаётся в поле. */
-  rejection?: string;
-  /** «Не знаю — помогите»: открывает ИИ-Консультанта. */
-  onHelp?: () => void;
-  onSave: (text: string) => void;
-  onCancel: () => void;
-}
-
-function LiveFieldEditor({ inputId, initialText, wasApproved, busy, question, criteria, example, rejection, onHelp, onSave, onCancel }: LiveFieldEditorProps) {
-  const [draft, setDraft] = useState(initialText);
-  return (
-    <div className="passport__editor">
-      {question && <p className="passport__editor-question">{question}</p>}
-      {criteria && <p className="passport__note">{`Что проверяет фонд: ${criteria}`}</p>}
-      {example && <p className="passport__note">{`Как обычно пишут: ${example}`}</p>}
-      <label htmlFor={inputId} className="passport__editor-hint">
-        Правка текста поля. После сохранения Буха заново найдёт каждое утверждение в тексте.
-      </label>
-      <textarea id={inputId} rows={4} value={draft} onChange={(e) => setDraft(e.target.value)} className="passport__textarea" />
-      {rejection && <AuditRemark remark={rejection} />}
-      {wasApproved && <span className="passport__editor-warn">Поле согласовано. Правка снимет согласование.</span>}
-      <div className="passport__editor-actions">
-        <button type="button" className="passport__btn-save" disabled={busy || !draft.trim()} onClick={() => onSave(draft.trim())}>
-          {busy ? 'Сохраняем…' : 'Сохранить'}
-        </button>
-        <button type="button" className="passport__btn-cancel" disabled={busy} onClick={onCancel}>
-          Отмена
-        </button>
-        {onHelp && (
-          <button type="button" className="passport__btn-cancel" disabled={busy} onClick={onHelp}>
-            Не знаю — помогите
-          </button>
-        )}
-      </div>
     </div>
   );
 }

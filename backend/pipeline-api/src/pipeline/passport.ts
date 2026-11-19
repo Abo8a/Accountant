@@ -3,11 +3,12 @@ import {
   PASSPORT_SECTIONS,
   isValidPassportField,
   type ClaimKind,
+  type ClaimOrigin,
   type ClaimType,
   type PipelinePassportField,
   type TargetField,
 } from '@passport/contracts';
-import { auditClaims, calculateClaimSpans, type DependencyNode, type RawClaim } from '@passport/passport-core';
+import { auditClaims, calculateClaimSpans, classifyClaimOrigin, type DependencyNode, type RawClaim } from '@passport/passport-core';
 import { callLlm, extractSchema, validateSchema, type LlmClaim } from '../llm/schemas';
 import { fieldKb } from '../kb/manifest';
 import { wrapUntrustedData } from '../promptGuard';
@@ -17,7 +18,7 @@ import { hasForeignScript, studentFacingRemark } from './remarks';
 import { getRagDb } from '../rag/db';
 import { retrieveRagContext } from '../rag/retriever';
 import type { DirectionCode } from '../rag/types';
-import type { ClaimDraft, RecordRow, SourceRow } from '../db/store';
+import type { ClaimDraft, ClaimRow, RecordRow, SourceRow } from '../db/store';
 import type { PipelineDeps } from './deps';
 
 const MAX_SOURCE_CHARS = 60_000;
@@ -55,7 +56,15 @@ export function stripMetaStubs(value: string): string | null {
   return kept.length > MIN_FIELD_LENGTH ? kept : null;
 }
 
-/** Записывает claims поля: спаны (0-based), аудит источников, атомарная замена в БД. */
+/** Откуда брать происхождение утверждений: что ввёл студент и какие утверждения у поля уже были. */
+export interface ClaimOriginContext {
+  /** Тексты студента: бриф, форма, ответ. Утверждение, чьи слова там есть, считается «со слов студента». */
+  userTexts: readonly string[];
+  /** Утверждения поля до перезаписи: то же утверждение сохраняет прежнее происхождение (правка соседнего места его не меняет). */
+  previous?: readonly ClaimRow[];
+}
+
+/** Записывает claims поля: спаны (0-based), аудит источников, происхождение, атомарная замена в БД. */
 export async function writeClaims(
   deps: PipelineDeps,
   recordId: string,
@@ -63,6 +72,7 @@ export async function writeClaims(
   claims: LlmClaim[],
   sourcesById: Record<string, { extracted_text: string | null }>,
   validSourceIds: Set<string>,
+  originCtx: ClaimOriginContext = { userTexts: [] },
 ): Promise<void> {
   // Утверждение, которого нет дословно в тексте поля, — шум модели (пересказ, обрезка): сохранённое, оно стало бы orphaned,
   // триггер БД снял бы с поля одобрение, и студента спросили бы о том же поле снова, хотя ответ принят.
@@ -102,9 +112,18 @@ export async function writeClaims(
     span_end: c.span_end,
     order_index: c.order_index,
     verification_status: c.verification_status,
+    origin: originOf(c, originCtx),
   }));
 
   await deps.store.replaceClaims(recordId, drafts);
+}
+
+/** Прежнее происхождение того же утверждения → привязка к документу студента → сравнение с текстом студента. */
+function originOf(c: { claim_text: string; source_id: string | null }, ctx: ClaimOriginContext): ClaimOrigin {
+  const before = ctx.previous?.find((p) => p.claim_text.trim() === c.claim_text);
+  if (before) return before.origin;
+  if (c.source_id) return 'user';
+  return classifyClaimOrigin(c.claim_text, ctx.userTexts);
 }
 
 /** Пробелы паспорта в порядке реестра секций: нет записи / пустое / needs_review. */
@@ -282,6 +301,9 @@ export async function extractPassport(
     extractSchema,
   );
 
+  // Всё, что студент написал сам: бриф и значения формы. По нему отличаем его слова от дописанного моделью.
+  const studentTexts = [userInput, ...(formFields?.map((f) => f.value) ?? [])].filter(Boolean);
+
   const sourcesById = Object.fromEntries(sources.map((s) => [s.id, { extracted_text: s.extracted_text }]));
   const validSourceIds = new Set(sources.map((s) => s.id));
 
@@ -348,7 +370,10 @@ export async function extractPassport(
     const prev = existingRec?.value ?? null;
     noteFieldChange(prev, value, item.section_id, changed);
     const recordId = await deps.store.upsertField(projectId, item.section_id, item.field_key, value);
-    await writeClaims(deps, recordId, value, item.claims ?? [], sourcesById, validSourceIds);
+    await writeClaims(deps, recordId, value, item.claims ?? [], sourcesById, validSourceIds, {
+      userTexts: studentTexts,
+      previous: existingRec?.claims,
+    });
   }
 
   await saveDirectionSuggestion(deps, projectId, suggested);
@@ -396,7 +421,10 @@ export async function extractPassport(
               confidence: null,
             },
           ];
-      await writeClaims(deps, recordId, value, fallbackClaims, sourcesById, validSourceIds);
+      await writeClaims(deps, recordId, value, fallbackClaims, sourcesById, validSourceIds, {
+        userTexts: studentTexts,
+        previous: existingRec?.claims,
+      });
     }
   }
 
@@ -460,6 +488,7 @@ export function buildPassportFields(records: RecordRow[]): PipelinePassportField
           span_end: c.span_end,
           order_index: c.order_index ?? 0,
           verification_status: c.verification_status,
+          origin: c.origin ?? 'user',
         })),
       });
     }
@@ -542,7 +571,8 @@ export async function answerField(
     source_locator: null,
   }));
   const recordId = await deps.store.upsertField(projectId, target.section_id, target.field_key, code.value);
-  await writeClaims(deps, recordId, code.value, claims, {}, new Set());
+  const previous = existingRecords.find((r) => r.section_id === target.section_id && r.field_key === target.field_key)?.claims;
+  await writeClaims(deps, recordId, code.value, claims, {}, new Set(), { userTexts: [answer], previous });
   return { ok: true };
 }
 

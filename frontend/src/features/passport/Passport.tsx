@@ -274,7 +274,8 @@ function segText(seg: Seg): string {
 }
 
 /** Подсказка на заблокированной кнопке скачивания (CJM, шаг 6: скачать можно после одобрения всех блоков). */
-const exportHint = 'Скачать можно, когда все 10 блоков одобрены';
+const exportHint = 'Паспорт ещё не одобрен целиком: незаполненные поля в файле останутся пустыми';
+const pdfHint = 'Выгрузка в PDF пока не готова — скачайте DOCX';
 
 /** exportReady — все блоки и смета одобрены аудитом (ответ COMPLETED.export_ready). По умолчанию — нет. */
 /** В живом режиме — паспорт пользователя (LivePassport), в демо — пример из макета. */
@@ -340,8 +341,8 @@ function DemoPassport({ exportReady = false }: { exportReady?: boolean }) {
           <span className="passport__saved">Сохранено 2 минуты назад</span>
         </div>
         <div className="passport__actions">
-          <button type="button" className="passport__btn" disabled={!ready} title={hint} onClick={() => void onDownloadDocx()}>DOCX</button>
-          <button type="button" className="passport__btn" disabled={!ready} title={hint}>PDF</button>
+          <button type="button" className="passport__btn" title={ready ? undefined : hint} onClick={() => void onDownloadDocx()}>DOCX</button>
+          <button type="button" className="passport__btn" disabled title={pdfHint}>PDF</button>
           <Link to="/result" className="passport__btn-brand">Итог проверки</Link>
           {downloadError && <span role="alert" className="passport__download-error">{downloadError}</span>}
         </div>

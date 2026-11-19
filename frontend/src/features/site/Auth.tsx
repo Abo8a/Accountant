@@ -1,10 +1,13 @@
-import { useState, type InputHTMLAttributes, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { PillLink, SegmentedControl } from '../../shared/ui';
 import { SiteBrand } from '../../shared/layout/SiteLayout';
 import { env } from '../../shared/config/env';
+import { useSessionState } from '../../shared/auth/useSession';
 import { Mascot } from './SiteArt';
+import { AuthField as Field } from './AuthField';
 import { CodeLogin } from './CodeLogin';
+import { PasswordLogin } from './PasswordLogin';
 import './Auth.css';
 
 // Вход и регистрация: design/project/Auth.dc.html. Тексты дословно из эталона.
@@ -22,34 +25,6 @@ const STEPS = [
   'Расскажите об идее или загрузите презентацию',
   'Ответьте на вопросы по пробелам',
 ];
-
-interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
-  id: string;
-  label: string;
-  /** Элемент справа от подписи (например, «Забыли пароль?»). */
-  aside?: ReactNode;
-}
-
-function Field({ id, label, aside, ...input }: FieldProps) {
-  const labelEl = (
-    <label htmlFor={id} className="auth__label">
-      {label}
-    </label>
-  );
-  return (
-    <div className="auth__field">
-      {aside ? (
-        <div className="auth__label-row">
-          {labelEl}
-          {aside}
-        </div>
-      ) : (
-        labelEl
-      )}
-      <input id={id} className="auth__input" {...input} />
-    </div>
-  );
-}
 
 function SignupForm() {
   return (
@@ -93,7 +68,13 @@ function LoginForm() {
 
 export function Auth() {
   const [mode, setMode] = useState<Mode>('signup');
+  // «Забыли пароль?» на вкладке «Вход»: тот же путь, что и регистрация (почта, пароль, код из письма), только без согласия.
+  const [resetting, setResetting] = useState(false);
   const navigate = useNavigate();
+  const session = useSessionState();
+
+  // Уже вошли (например, вернулись с лендинга по логотипу): заново входить не нужно, ведём в кабинет.
+  if (session === 'in') return <Navigate to="/passport" replace />;
 
   return (
     <div className="auth">
@@ -107,19 +88,29 @@ export function Auth() {
             ariaLabel="Вход или регистрация"
             options={MODE_OPTIONS}
             value={mode}
-            onChange={(id) => setMode(id as Mode)}
+            onChange={(id) => {
+              setMode(id as Mode);
+              setResetting(false);
+            }}
           />
           {env.liveApi ? (
-            <div className="auth__stack" key={mode}>
+            <div className="auth__stack" key={`${mode}-${resetting}`}>
               <div className="auth__heading">
                 <h1 className="t-screen-title">{mode === 'signup' ? 'Создайте аккаунт' : 'С возвращением'}</h1>
               </div>
-              <CodeLogin
-                purpose="user"
-                consent={mode === 'signup'}
-                submitLabel={mode === 'signup' ? 'Зарегистрироваться' : 'Войти'}
-                onSuccess={() => navigate(mode === 'signup' ? '/onboarding' : '/passport', { replace: true })}
-              />
+              {mode === 'signup' ? (
+                <CodeLogin
+                  purpose="user"
+                  consent
+                  withPassword
+                  submitLabel="Зарегистрироваться"
+                  onSuccess={() => navigate('/onboarding', { replace: true })}
+                />
+              ) : resetting ? (
+                <CodeLogin purpose="user" withPassword submitLabel="Войти" onSuccess={() => navigate('/passport', { replace: true })} />
+              ) : (
+                <PasswordLogin onSuccess={() => navigate('/passport', { replace: true })} onForgot={() => setResetting(true)} />
+              )}
             </div>
           ) : mode === 'signup' ? (
             <SignupForm />

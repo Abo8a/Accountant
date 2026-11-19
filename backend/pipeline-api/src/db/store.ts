@@ -1,6 +1,6 @@
 // Слой данных пайплайна. Вся бизнес-логика статусов (review_status, инвалидация спанов, guard-порог)
 // выполняется триггерами и функциями из migrations/0003 — здесь только согласованные запросы.
-import type { BudgetCategory, ClaimKind, ClaimType, ClaimVerificationStatus, ProjectStatus } from '@passport/contracts';
+import type { BudgetCategory, ClaimKind, ClaimOrigin, ClaimType, ClaimVerificationStatus, ProjectStatus } from '@passport/contracts';
 import type { BudgetLimits, BudgetLineItem } from '@passport/passport-core';
 import type { SqlClient } from './sql';
 import { toVectorLiteral } from './sql';
@@ -123,6 +123,7 @@ export interface ClaimRow {
   span_end: number | null;
   order_index: number | null;
   verification_status: ClaimVerificationStatus;
+  origin: ClaimOrigin;
 }
 
 export interface RecordRow {
@@ -145,6 +146,7 @@ export interface ClaimDraft {
   span_end: number | null;
   order_index: number;
   verification_status: ClaimVerificationStatus;
+  origin: ClaimOrigin;
 }
 
 const CONTEXT_SQL = `
@@ -373,12 +375,12 @@ export class PassportStore {
     await this.sql.query(
       `WITH del AS (DELETE FROM project_claims WHERE record_id = $1::uuid RETURNING id)
        INSERT INTO project_claims (record_id, claim_text, claim_type, claim_kind, source_id, source_locator,
-                                   span_start, span_end, order_index, confidence, verification_status)
+                                   span_start, span_end, order_index, confidence, verification_status, origin)
        SELECT $1::uuid, c.claim_text, c.claim_type::claim_type, c.claim_kind, c.source_id::uuid, c.source_locator,
-              c.span_start, c.span_end, c.order_index, c.confidence, c.verification_status::claim_verification_status
+              c.span_start, c.span_end, c.order_index, c.confidence, c.verification_status::claim_verification_status, c.origin
          FROM jsonb_to_recordset($2::jsonb) AS c(
               claim_text text, claim_type text, claim_kind text, source_id text, source_locator jsonb,
-              span_start int, span_end int, order_index int, confidence float8, verification_status text)`,
+              span_start int, span_end int, order_index int, confidence float8, verification_status text, origin text)`,
       [recordId, JSON.stringify(claims)],
     );
   }
@@ -390,7 +392,7 @@ export class PassportStore {
                  'claim_text', c.claim_text, 'claim_type', c.claim_type, 'claim_kind', c.claim_kind,
                  'source_id', c.source_id, 'source_locator', c.source_locator,
                  'span_start', c.span_start, 'span_end', c.span_end, 'order_index', c.order_index,
-                 'verification_status', c.verification_status
+                 'verification_status', c.verification_status, 'origin', c.origin
                ) ORDER BY c.order_index) FILTER (WHERE c.id IS NOT NULL), '[]'::json) AS claims
          FROM project_passport_records r
          LEFT JOIN project_claims c ON c.record_id = r.id
@@ -400,6 +402,27 @@ export class PassportStore {
       [projectId],
     );
     return rows as RecordRow[];
+  }
+
+  /** Форма поля (интерактивная анкета) рядом с текстом. Пишется после текста: смена value сбрасывает её триггером (0016). */
+  async setFieldForm(projectId: string, sectionId: number, fieldKey: string, form: unknown): Promise<boolean> {
+    const { rows } = await this.sql.query(
+      `UPDATE project_passport_records SET form_data = $4::jsonb
+        WHERE project_id = $1::uuid AND section_id = $2 AND field_key = $3 AND value IS NOT NULL AND btrim(value) <> ''
+        RETURNING id`,
+      [projectId, sectionId, fieldKey, JSON.stringify(form)],
+    );
+    return rows.length > 0;
+  }
+
+  /** Формы полей проекта: ключ «секция/поле» → данные формы (только поля, где форма есть). */
+  async getFieldForms(projectId: string): Promise<Record<string, unknown>> {
+    const { rows } = await this.sql.query(
+      `SELECT section_id, field_key, form_data FROM project_passport_records
+        WHERE project_id = $1::uuid AND form_data IS NOT NULL`,
+      [projectId],
+    );
+    return Object.fromEntries(rows.map((r: any) => [`${r.section_id}/${r.field_key}`, r.form_data]));
   }
 
   async markNeedsReview(projectId: string, sectionId: number, fieldKey: string): Promise<void> {

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -44,10 +44,10 @@ function cabinet(passport: PipelinePassportField[], extra: Partial<CabinetState>
 const QUESTION: PipelineResponse = {
   status: 'NEED_USER_INPUT',
   step: 'GAP_FILLING',
-  target_field: { section_id: 6, field_key: 'analogues_comparison' },
-  question: 'С какими аналогами вы сравниваете продукт?',
-  criteria: 'Не меньше двух аналогов',
-  example: 'Аналог А, аналог Б…',
+  target_field: { section_id: 6, field_key: 'verification_protocol' },
+  question: 'Как вы проверите отличие?',
+  criteria: 'Измеримый протокол',
+  example: 'A/B-сравнение…',
 };
 
 const PASSPORT = [
@@ -55,7 +55,7 @@ const PASSPORT = [
   field(4, 'direction', 'Н1'),
   field(4, 'tech_challenge', null),
   field(4, 'product_summary', 'Сервис для бухгалтерии'),
-  field(6, 'analogues_comparison', null),
+  field(6, 'verification_protocol', null),
   field(6, 'novelty_hypothesis', 'Быстрее аналогов', 'needs_review'),
 ];
 
@@ -84,22 +84,22 @@ describe('LivePassport — доработка в блоках', () => {
     mocks.state = cabinet(PASSPORT);
     renderAt();
     expect(screen.getByRole('heading', { level: 2, name: 'Аналоги и предполагаемые отличия' })).toBeInTheDocument();
-    expect(screen.getByText('С какими аналогами вы сравниваете продукт?')).toBeInTheDocument();
+    expect(screen.getByText('Как вы проверите отличие?')).toBeInTheDocument();
   });
 
   it('пустое поле: «Заполнить» → ответ уходит с проверкой ИИ (submit_answer)', async () => {
     const user = userEvent.setup();
     renderAt('/passport?block=6');
-    const card = screen.getByRole('heading', { level: 3, name: 'Аналоги и сравнение' }).closest('article')!;
+    const card = screen.getByRole('heading', { level: 3, name: 'Протокол проверки' }).closest('article')!;
     expect(within(card).getByText('Пока не заполнено.')).toBeInTheDocument();
     await user.click(within(card).getByRole('button', { name: 'Заполнить' }));
-    await user.type(within(card).getByRole('textbox'), 'Аналог А и аналог Б');
+    await user.type(within(card).getByRole('textbox'), 'A/B-сравнение на 50 пользователях');
     await user.click(within(card).getByRole('button', { name: 'Сохранить' }));
     await waitFor(() =>
       expect(mocks.call).toHaveBeenCalledWith({
         action: 'submit_answer',
-        target_field: { section_id: 6, field_key: 'analogues_comparison' },
-        text_input: 'Аналог А и аналог Б',
+        target_field: { section_id: 6, field_key: 'verification_protocol' },
+        text_input: 'A/B-сравнение на 50 пользователях',
       }),
     );
     expect(mocks.refresh).toHaveBeenCalled();
@@ -113,23 +113,23 @@ describe('LivePassport — доработка в блоках', () => {
     );
     const user = userEvent.setup();
     renderAt('/passport?block=6');
-    const card = screen.getByRole('heading', { level: 3, name: 'Аналоги и сравнение' }).closest('article')!;
+    const card = screen.getByRole('heading', { level: 3, name: 'Протокол проверки' }).closest('article')!;
     await user.click(within(card).getByRole('button', { name: 'Заполнить' }));
-    await user.type(within(card).getByRole('textbox'), 'Аналог А');
+    await user.type(within(card).getByRole('textbox'), 'A/B');
     await user.click(within(card).getByRole('button', { name: 'Сохранить' }));
     expect(await within(card).findByText('Нужно минимум два аналога.')).toBeInTheDocument();
-    expect(within(card).getByRole('textbox')).toHaveValue('Аналог А');
+    expect(within(card).getByRole('textbox')).toHaveValue('A/B');
   });
 
   it('вопрос пайплайна, критерий и пример — в редакторе поля, о котором спрашивают', async () => {
     window.sessionStorage.setItem('buha.flow', JSON.stringify({ last: QUESTION }));
     const user = userEvent.setup();
     renderAt('/passport?block=6');
-    const card = screen.getByRole('heading', { level: 3, name: 'Аналоги и сравнение' }).closest('article')!;
+    const card = screen.getByRole('heading', { level: 3, name: 'Протокол проверки' }).closest('article')!;
     await user.click(within(card).getByRole('button', { name: 'Заполнить' }));
-    expect(within(card).getByText('С какими аналогами вы сравниваете продукт?')).toBeInTheDocument();
-    expect(within(card).getByText('Что проверяет фонд: Не меньше двух аналогов')).toBeInTheDocument();
-    expect(within(card).getByText('Как обычно пишут: Аналог А, аналог Б…')).toBeInTheDocument();
+    expect(within(card).getByText('Как вы проверите отличие?')).toBeInTheDocument();
+    expect(within(card).getByText('Что проверяет фонд: Измеримый протокол')).toBeInTheDocument();
+    expect(within(card).getByText('Как обычно пишут: A/B-сравнение…')).toBeInTheDocument();
     await user.type(within(card).getByRole('textbox'), 'А и Б');
     await user.click(within(card).getByRole('button', { name: 'Сохранить' }));
     await waitFor(() =>
@@ -162,6 +162,47 @@ describe('LivePassport — доработка в блоках', () => {
     expect(screen.getByText('Один аналог — мало. Добавьте второй.')).toBeInTheDocument();
   });
 
+  it('легенда — три подчёркивания: «С ваших слов», «Дописано ИИ», «Заполнить»', () => {
+    renderAt('/passport?block=6');
+    const legend = screen.getByRole('list', { name: 'Обозначения' });
+    expect(within(legend).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['С ваших слов', 'Дописано ИИ', 'Заполнить']);
+  });
+
+  it('текст поля подчёркнут по происхождению; в панели утверждения — чьи это слова', async () => {
+    const user = userEvent.setup();
+    const own = 'Провели две фокус-группы.';
+    const added = 'Сервис монетизируется подпиской.';
+    const claim = (text: string, start: number, origin: 'user' | 'ai'): PipelinePassportField['claims'][number] => ({
+      claim_text: text,
+      claim_type: 'client_statement',
+      claim_kind: 'sentence',
+      source_id: null,
+      source_locator: null,
+      span_start: start,
+      span_end: start + text.length,
+      order_index: 1,
+      verification_status: 'unverified',
+      origin,
+    });
+    const value = `${own} ${added}`;
+    mocks.state = cabinet([{ ...field(2, 'team_members', value), claims: [claim(own, 0, 'user'), claim(added, own.length + 1, 'ai')] }]);
+    renderAt('/passport?block=2');
+    expect(screen.getByText(own)).toHaveClass('passport-claim--user');
+    expect(screen.getByText(added)).toHaveClass('passport-claim--ai');
+    await user.click(screen.getByText(added));
+    expect(within(screen.getByRole('complementary', { name: 'Утверждение' })).getByText('Дописано ИИ')).toBeInTheDocument();
+    await user.click(screen.getByText(own));
+    expect(within(screen.getByRole('complementary', { name: 'Утверждение' })).getByText('Слова пользователя')).toBeInTheDocument();
+  });
+
+  it('пустое обязательное поле подчёркнуто как «Заполнить», необязательное — нет', () => {
+    renderAt('/passport?block=6');
+    expect(screen.getByText('Пока не заполнено.')).toHaveClass('passport__to-fill');
+    cleanup();
+    renderAt('/passport?block=4');
+    expect(screen.getByText('Необязательное поле.')).not.toHaveClass('passport__to-fill');
+  });
+
   it('смета — пункт под блоками; ссылка ?block=budget открывает её', () => {
     mocks.state = cabinet(PASSPORT, { budget_audit: { status: 'needs_review', remark: 'Превышен лимит 1-го этапа.', how_to_fix: null, violations: [] } });
     renderAt('/passport?block=budget');
@@ -184,5 +225,39 @@ describe('LivePassport — доработка в блоках', () => {
     expect(within(challenge).queryByRole('button')).not.toBeInTheDocument();
     await user.click(within(direction).getByRole('button', { name: 'Править' }));
     expect(within(direction).getByRole('button', { name: 'Отмена' })).toBeInTheDocument();
+  });
+  it('анкета в блоке: пустая команда заполняется таблицей, ответ уходит вместе с формой', async () => {
+    mocks.state = cabinet([field(2, 'team_members', null), field(2, 'competencies_and_experience', null)]);
+    const user = userEvent.setup();
+    renderAt('/passport?block=2');
+    const card = screen.getByRole('heading', { level: 3, name: 'Состав команды' }).closest('article')!;
+    await user.click(within(card).getByRole('button', { name: 'Заполнить' }));
+    await user.type(within(card).getByRole('textbox', { name: 'ФИО, строка 1' }), 'Иван Иванов');
+    await user.type(within(card).getByRole('textbox', { name: 'Роль в проекте, строка 1' }), 'разработка');
+    await user.click(within(card).getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(mocks.call).toHaveBeenCalledWith({
+        action: 'submit_answer',
+        target_field: { section_id: 2, field_key: 'team_members' },
+        text_input: 'В команде 1 человек: Иван Иванов (разработка).',
+        field_form: {
+          section_id: 2,
+          field_key: 'team_members',
+          data: { choice: '', flags: [], inputs: {}, rows: [{ name: 'Иван Иванов', role: 'разработка' }], text: '' },
+        },
+      }),
+    );
+  });
+
+  it('опыт команды подхватывает участников из сохранённой анкеты команды', async () => {
+    mocks.state = cabinet([
+      { ...field(2, 'team_members', 'Команда: Иван Иванов'), form_data: { rows: [{ name: 'Иван Иванов', role: 'код' }] } },
+      field(2, 'competencies_and_experience', null),
+    ]);
+    const user = userEvent.setup();
+    renderAt('/passport?block=2');
+    const card = screen.getByRole('heading', { level: 3, name: 'Компетенции и опыт команды' }).closest('article')!;
+    await user.click(within(card).getByRole('button', { name: 'Заполнить' }));
+    expect(within(card).getByRole('textbox', { name: 'Участник, строка 1' })).toHaveValue('Иван Иванов');
   });
 });

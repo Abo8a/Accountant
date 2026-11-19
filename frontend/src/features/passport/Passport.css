@@ -137,6 +137,23 @@ a.passport__btn-brand:hover {
   border-bottom: 2px dashed var(--color-hearsay-line);
 }
 
+/* Живой паспорт: подчёркивания по происхождению текста. Цвета — те же токены, что у типов утверждений. */
+
+.passport__swatch--user {
+  background: var(--color-fact-doc-bg);
+  border-bottom: 2px solid var(--color-fact-doc-line);
+}
+
+.passport__swatch--ai {
+  background: var(--color-plan-bg);
+  border-bottom: 2px dotted var(--color-plan-line);
+}
+
+.passport__swatch--to-fill {
+  background: var(--color-fact-nodoc-bg);
+  border-bottom: 2px dashed var(--color-fact-nodoc-line);
+}
+
 .passport__expert {
   display: inline-flex;
   align-items: center;
@@ -380,6 +397,14 @@ a.passport__btn-brand:hover {
   color: var(--color-gray-600);
 }
 
+/* Пустое обязательное поле: подчёркивание «Заполнить» из легенды */
+.passport__to-fill {
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-2xs);
+  background: var(--color-fact-nodoc-bg);
+  border-bottom: 2px dashed var(--color-fact-nodoc-line);
+}
+
 /* Правка поля */
 
 .passport__editor {
@@ -541,6 +566,17 @@ a.passport-claim:hover {
 .passport-claim--hearsay {
   background: var(--color-hearsay-bg);
   border-bottom: 2px dashed var(--color-hearsay-line);
+}
+
+/* Живой паспорт: «С ваших слов» и «Дописано ИИ» */
+.passport-claim--user {
+  background: var(--color-fact-doc-bg);
+  border-bottom: 2px solid var(--color-fact-doc-line);
+}
+
+.passport-claim--ai {
+  background: var(--color-plan-bg);
+  border-bottom: 2px dotted var(--color-plan-line);
 }
 
 /* Режим эксперта: всё, кроме рисков, приглушено; риски обведены. */

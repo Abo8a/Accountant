@@ -54,11 +54,19 @@ export async function loadCabinetState(deps: PipelineDeps, ctx: UserContext): Pr
     study_certificate: ctx.studyCertificate,
     files: ctx.project ? await deps.store.listProjectFiles(ctx.project.id) : [],
     project_status: ctx.project?.status ?? null,
-    passport: ctx.project?.hasRecords ? buildPassportFields(records) : [],
+    passport: ctx.project?.hasRecords ? withFieldForms(buildPassportFields(records), await deps.store.getFieldForms(ctx.project.id)) : [],
     block_audits: report?.block_audits ?? [],
     budget_audit: report?.budget_audit ?? null,
     result,
   };
+}
+
+/** Формы интерактивных анкет (form_data) — к полям паспорта; у поля без формы ключа нет. */
+function withFieldForms(fields: PipelinePassportField[], forms: Record<string, unknown>): PipelinePassportField[] {
+  return fields.map((f) => {
+    const form = forms[`${f.section_id}/${f.field_key}`];
+    return form && typeof form === 'object' ? { ...f, form_data: form as Record<string, unknown> } : f;
+  });
 }
 
 export const STUDY_CERTIFICATE_MAX_BYTES = 8 * 1024 * 1024;

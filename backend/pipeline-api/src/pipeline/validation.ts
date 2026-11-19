@@ -45,6 +45,15 @@ export const pipelineRequestSchema = z
       )
       .max(200)
       .optional(),
+    // Форма интерактивной анкеты для поля, которое сохраняется этим запросом (submit_answer / submit_form).
+    field_form: z
+      .object({
+        section_id: z.number().int().min(2).max(10),
+        field_key: z.string().min(1).max(100),
+        data: z.record(z.string(), z.unknown()),
+      })
+      .refine((f) => JSON.stringify(f.data).length <= 50_000, 'Форма поля слишком большая')
+      .optional(),
     budget_items: z
       .array(
         z.object({

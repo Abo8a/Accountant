@@ -187,6 +187,34 @@ services:
           memory: ${MEM_BACKUP:-256m}
     logging: *logging
 
+  # Выгрузка копий из ./backups в Backblaze B2 с шифрованием на сервере (rclone crypt), раз в 6 часов; новые копии уходят без удаления старых.
+  # Без BACKUP_S3_* и BACKUP_ENCRYPTION_PASSWORD в .env сервис ничего не отправляет и пишет в лог, чего не хватает. Только в профиле prod.
+  # Пароль шифрования нельзя терять: без него копии в B2 не расшифровать (docs/backup.md).
+  backup-sync:
+    image: rclone/rclone:1.76
+    profiles: ["prod"]
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup-sync.sh"]
+    environment:
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      BACKUP_S3_REGION: ${BACKUP_S3_REGION:-}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_KEY_ID: ${BACKUP_S3_KEY_ID:-}
+      BACKUP_S3_APPLICATION_KEY: ${BACKUP_S3_APPLICATION_KEY:-}
+      BACKUP_ENCRYPTION_PASSWORD: ${BACKUP_ENCRYPTION_PASSWORD:-}
+      BACKUP_ENCRYPTION_SALT: ${BACKUP_ENCRYPTION_SALT:-}
+      BACKUP_SYNC_INTERVAL_HOURS: ${BACKUP_SYNC_INTERVAL_HOURS:-6}
+    volumes:
+      - ./deploy/backup-sync.sh:/backup-sync.sh:ro
+      - ./backups:/backups:ro
+    # Healthcheck не задан намеренно (как у backup): сбой выгрузки не должен ронять выкладку сайта. Результат — в логах контейнера.
+    deploy:
+      resources:
+        limits:
+          cpus: ${CPU_BACKUP_SYNC:-0.5}
+          memory: ${MEM_BACKUP_SYNC:-256m}
+    logging: *logging
+
   frontend:
     build:
       context: .

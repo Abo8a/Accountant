@@ -58,7 +58,7 @@ Accountant/
 
 ### Загрузка материалов проекта
 
-Файлы лежат на общем томе `uploads`: pipeline монтирует его в `/data/uploads` на запись (`UPLOAD_DIR`), parser — на чтение по тому же пути. Путь файла: `/data/uploads/<user_id>/<sha256>.<pdf|docx|pptx>`; имя из запроса на диск не попадает. **Том нужно бэкапить вместе с базой**: в `project_sources` хранится только ссылка и извлечённый текст. Это делает сервис `backup` (раз в сутки: дамп базы и архив тома в `backups/`), подробности и восстановление — в [backup.md](backup.md).
+Файлы лежат на общем томе `uploads`: pipeline монтирует его в `/data/uploads` на запись (`UPLOAD_DIR`), parser — на чтение по тому же пути. Путь файла: `/data/uploads/<user_id>/<sha256>.<pdf|docx|pptx>`; имя из запроса на диск не попадает. **Том нужно бэкапить вместе с базой**: в `project_sources` хранится только ссылка и извлечённый текст. Это делает сервис `backup` (раз в сутки: дамп базы и архив тома в `backups/`), а `backup-sync` шифрует копии и отправляет их в Backblaze B2. Подробности и восстановление — в [backup.md](backup.md).
 
 Загрузка — два запроса, потому что разбор занимает минуты:
 1. `POST /pipeline/files` (тело — файл, имя в `x-file-name`, до 25 МБ; PDF, DOCX, PPTX) — проверяет тариф (`ai_parsing`), лимит и дубль по sha256, сохраняет файл. Ответ сразу: `OK` + ссылка, `DUPLICATE` либо 422 (`PLAN_UPGRADE_REQUIRED`, `FILE_QUOTA_EXCEEDED`, `INVALID_FIELD_VALUE`).

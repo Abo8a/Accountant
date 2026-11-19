@@ -216,11 +216,13 @@ export function Result({ exportReady = false }: { exportReady?: boolean } = {}) 
 
   async function onDownloadDocx() {
     const founder = (cabinet?.founder as FounderInput | undefined) ?? loadFlow().founder;
-    if (!founder?.full_name || !completed) {
-      setDownloadError('Сначала заполните данные основателя и дождитесь готового паспорта.');
+    // Скачать можно на любом этапе: без итоговой проверки берём текущий паспорт из кабинета.
+    const passport = completed?.passport ?? cabinet?.passport;
+    if (!founder?.full_name || !passport || passport.length === 0) {
+      setDownloadError('Сначала заполните данные основателя и опишите проект.');
       return;
     }
-    setDownloadError(await downloadPassport(founder, completed.passport));
+    setDownloadError(await downloadPassport(founder, passport));
   }
 
   const heroIcon = verdict === 'bad' || verdict === 'fatal' ? 'bad' : verdict;
@@ -354,12 +356,12 @@ export function Result({ exportReady = false }: { exportReady?: boolean } = {}) 
                 Все блоки и смета одобрены аудитом
               </p>
             ) : (
-              <p className="result__approve-note">Скачать можно, когда будут закрыты все пункты списка «Что сделать перед подачей».</p>
+              <p className="result__approve-note">Скачать можно уже сейчас: незаполненные поля в файле останутся пустыми. Перед подачей закройте пункты списка «Что сделать перед подачей».</p>
             )}
             {downloadError && <p role="alert" className="result__download-error">{downloadError}</p>}
             <div className="result__downloads">
-              <button type="button" className="result__download" disabled={!ready} onClick={() => void onDownloadDocx()}>Скачать DOCX</button>
-              <button type="button" className="result__download" disabled={!ready}>Скачать PDF</button>
+              <button type="button" className="result__download" onClick={() => void onDownloadDocx()}>Скачать DOCX</button>
+              <button type="button" className="result__download" disabled title="Выгрузка в PDF пока не готова — скачайте DOCX">Скачать PDF</button>
             </div>
             <p className="result__fine">Скачивание не означает подачу. Заявка подаётся в системе фонда.</p>
           </section>

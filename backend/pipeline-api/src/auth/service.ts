@@ -1,7 +1,17 @@
-// Вход и регистрация по коду из письма. Пароли не используются.
-// Пользователь: email → 6-значный код → аккаунт создаётся при первом подтверждении.
-// Админ: только существующий аккаунт с role = 'admin' (роль выдаётся вручную в БД, через API её нельзя поменять).
-import { createHash, createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
+// Вход и регистрация.
+// Пользователь: регистрация — email + 6-значный код из письма + пароль (аккаунт создаётся при подтверждении кода);
+// дальше вход — email + пароль, без кода. Забытый пароль меняется тем же путём: код из письма + новый пароль.
+// Админ: только существующий аккаунт с role = 'admin', вход по коду из письма (роль выдаётся вручную в БД, через API её нельзя поменять).
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomInt,
+  randomUUID,
+  scrypt as scryptCb,
+  timingSafeEqual,
+  type ScryptOptions,
+} from 'node:crypto';
 import type { SqlClient } from '../db/sql';
 import type { MailPort } from '../mail/port';
 
@@ -10,6 +20,11 @@ export const CODE_COOLDOWN_MS = 60 * 1000;
 export const CODES_PER_HOUR = 5;
 export const MAX_CODE_ATTEMPTS = 5;
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const MIN_PASSWORD_LENGTH = 8;
+export const MAX_PASSWORD_LENGTH = 128;
+/** Неудачных входов по паролю на одну почту за окно, после которых вход временно закрыт. */
+export const MAX_LOGIN_FAILURES = 10;
+export const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
 
 export type AuthPurpose = 'user' | 'admin';
 
@@ -21,9 +36,48 @@ export interface AuthUser {
 
 export type VerifyResult =
   | ({ ok: true; token: string } & AuthUser)
-  | { ok: false; code: 'INVALID_EMAIL' | 'INVALID_CODE' | 'CODE_EXPIRED' | 'TOO_MANY_ATTEMPTS' | 'NOT_ADMIN' | 'BANNED' };
+  | {
+      ok: false;
+      code: 'INVALID_EMAIL' | 'INVALID_CODE' | 'CODE_EXPIRED' | 'TOO_MANY_ATTEMPTS' | 'NOT_ADMIN' | 'BANNED' | 'WEAK_PASSWORD';
+    };
+
+export type LoginResult =
+  | ({ ok: true; token: string } & AuthUser)
+  | { ok: false; code: 'INVALID_CREDENTIALS' | 'TOO_MANY_ATTEMPTS' | 'BANNED' };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1, keylen: 64 } as const;
+
+function scrypt(password: string, salt: Buffer, keylen: number, options: ScryptOptions): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scryptCb(password, salt, keylen, options, (err, key) => (err ? reject(err) : resolve(key)));
+  });
+}
+
+/** Хеш пароля: `scrypt$N$r$p$соль$ключ` (всё в base64url/числах). Пароль в базе в открытом виде не хранится. */
+export async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16);
+  const { N, r, p, keylen } = SCRYPT_PARAMS;
+  const key = await scrypt(password, salt, keylen, { N, r, p });
+  return ['scrypt', N, r, p, salt.toString('base64url'), key.toString('base64url')].join('$');
+}
+
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [scheme, n, r, p, saltB64, keyB64] = stored.split('$');
+  if (scheme !== 'scrypt' || !n || !r || !p || !saltB64 || !keyB64) return false;
+  const expected = Buffer.from(keyB64, 'base64url');
+  const actual = await scrypt(password, Buffer.from(saltB64, 'base64url'), expected.length, {
+    N: Number(n),
+    r: Number(r),
+    p: Number(p),
+  });
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+export function isAcceptablePassword(password: unknown): password is string {
+  return typeof password === 'string' && password.length >= MIN_PASSWORD_LENGTH && password.length <= MAX_PASSWORD_LENGTH;
+}
 
 export function normalizeEmail(raw: string): string | null {
   const email = raw.trim().toLowerCase();
@@ -100,10 +154,15 @@ export class AuthService {
     return 'SENT';
   }
 
-  /** Проверяет код; при успехе создаёт аккаунт (для user, если его нет) и сессию. */
-  async verifyCode(rawEmail: string, code: string, purpose: AuthPurpose): Promise<VerifyResult> {
+  /**
+   * Проверяет код; при успехе создаёт аккаунт (для user, если его нет) и сессию.
+   * Для user нужен пароль: он проверяется до кода (слабый пароль не сжигает код) и сохраняется после подтверждения.
+   * Если аккаунт уже есть, пароль заменяется на новый (так работает «Забыли пароль?»), а остальные сессии закрываются.
+   */
+  async verifyCode(rawEmail: string, code: string, purpose: AuthPurpose, password?: string): Promise<VerifyResult> {
     const email = normalizeEmail(rawEmail);
     if (!email) return { ok: false, code: 'INVALID_EMAIL' };
+    if (purpose === 'user' && !isAcceptablePassword(password)) return { ok: false, code: 'WEAK_PASSWORD' };
     const now = this.now();
 
     const found = await this.sql.query(
@@ -124,19 +183,84 @@ export class AuthService {
     await this.sql.query(`UPDATE auth_codes SET consumed = true WHERE id = $1`, [row.id]);
 
     let profile = await this.findProfile(email);
+    let isNewAccount = false;
     if (purpose === 'admin') {
       if (!profile || profile.role !== 'admin') return { ok: false, code: 'NOT_ADMIN' };
     } else if (!profile) {
       profile = await this.createAccount(email);
+      isNewAccount = true;
     }
     if (profile.is_banned) return { ok: false, code: 'BANNED' };
 
+    if (purpose === 'user' && password) {
+      await this.setPassword(profile.id, password);
+      // Пароль сменили через код из письма: старые сессии (возможно, чужие) закрываем.
+      if (!isNewAccount) await this.sql.query(`DELETE FROM auth_sessions WHERE user_id = $1::uuid`, [profile.id]);
+      await this.sql.query(`DELETE FROM auth_login_failures WHERE email = $1`, [email]);
+    }
+
+    const token = await this.createSession(profile.id, now);
+    return { ok: true, token, userId: profile.id, email, role: profile.role };
+  }
+
+  /**
+   * Вход по почте и паролю (без кода). Ошибка всегда одна и та же (INVALID_CREDENTIALS) — по ответу нельзя понять,
+   * есть ли такая почта. Админов здесь нет: они входят по коду через отдельный вход (purpose = 'admin').
+   */
+  async loginWithPassword(rawEmail: string, password: string): Promise<LoginResult> {
+    const email = normalizeEmail(rawEmail);
+    if (!email || typeof password !== 'string' || password.length === 0 || password.length > MAX_PASSWORD_LENGTH) {
+      return { ok: false, code: 'INVALID_CREDENTIALS' };
+    }
+    const now = this.now();
+
+    const failures = await this.sql.query(
+      `SELECT count(*)::int AS n FROM auth_login_failures WHERE email = $1 AND created_at > $2::timestamptz`,
+      [email, new Date(now.getTime() - LOGIN_FAILURE_WINDOW_MS).toISOString()],
+    );
+    if (Number(failures.rows[0]?.n ?? 0) >= MAX_LOGIN_FAILURES) return { ok: false, code: 'TOO_MANY_ATTEMPTS' };
+
+    const { rows } = await this.sql.query(
+      `SELECT p.id, p.role, p.is_banned, pw.password_hash
+         FROM app_profiles p JOIN auth_passwords pw ON pw.user_id = p.id
+        WHERE p.email = $1`,
+      [email],
+    );
+    const row = rows[0];
+    // Для неизвестной почты всё равно считаем хеш: время ответа не выдаёт, есть ли аккаунт.
+    const matches = await verifyPassword(password, row ? String(row.password_hash) : await this.decoyHash());
+    if (!row || !matches || row.role === 'admin') {
+      await this.sql.query(`INSERT INTO auth_login_failures (email, created_at) VALUES ($1, $2::timestamptz)`, [email, now.toISOString()]);
+      return { ok: false, code: 'INVALID_CREDENTIALS' };
+    }
+    if (row.is_banned) return { ok: false, code: 'BANNED' };
+
+    await this.sql.query(`DELETE FROM auth_login_failures WHERE email = $1`, [email]);
+    const token = await this.createSession(row.id, now);
+    return { ok: true, token, userId: row.id, email, role: row.role };
+  }
+
+  private decoy: Promise<string> | null = null;
+  private decoyHash(): Promise<string> {
+    this.decoy ??= hashPassword(randomBytes(16).toString('hex'));
+    return this.decoy;
+  }
+
+  private async setPassword(userId: string, password: string): Promise<void> {
+    await this.sql.query(
+      `INSERT INTO auth_passwords (user_id, password_hash, updated_at) VALUES ($1::uuid, $2, $3::timestamptz)
+       ON CONFLICT (user_id) DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = EXCLUDED.updated_at`,
+      [userId, await hashPassword(password), this.now().toISOString()],
+    );
+  }
+
+  private async createSession(userId: string, now: Date): Promise<string> {
     const token = randomBytes(32).toString('base64url');
     await this.sql.query(
       `INSERT INTO auth_sessions (token_hash, user_id, expires_at) VALUES ($1, $2::uuid, $3::timestamptz)`,
-      [sha256Hex(token), profile.id, new Date(now.getTime() + SESSION_TTL_MS).toISOString()],
+      [sha256Hex(token), userId, new Date(now.getTime() + SESSION_TTL_MS).toISOString()],
     );
-    return { ok: true, token, userId: profile.id, email, role: profile.role };
+    return token;
   }
 
   /** Пользователь по токену сессии (cookie). Забаненный и просроченный — null. */

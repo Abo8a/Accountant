@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { BrandMark, PillLink } from '../ui';
+import { useSessionState } from '../auth/useSession';
 import './SiteLayout.css';
 
 // Публичная оболочка: шапка «Буха Паспорт», навигация и подвал из design/project/Main.dc.html.
@@ -38,6 +39,7 @@ export function SiteBrand({ className }: SiteBrandProps) {
 
 export function SiteLayout({ children, withFooter = true }: SiteLayoutProps) {
   useHashScroll();
+  const signedIn = useSessionState() === 'in';
 
   return (
     <div className="site">
@@ -59,8 +61,9 @@ export function SiteLayout({ children, withFooter = true }: SiteLayoutProps) {
         </nav>
 
         <div className="site__actions">
-          <Link to="/auth" className="site__signin">Войти</Link>
-          <PillLink to="/auth" variant="brand-outline" size="nav">Собрать паспорт</PillLink>
+          {/* Вошедшему «Войти» не нужно: сессия жива, «Собрать паспорт» ведёт сразу в кабинет. */}
+          {!signedIn && <Link to="/auth" className="site__signin">Войти</Link>}
+          <PillLink to={signedIn ? '/passport' : '/auth'} variant="brand-outline" size="nav">Собрать паспорт</PillLink>
         </div>
       </header>
 
