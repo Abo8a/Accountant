@@ -296,7 +296,7 @@ export function LivePassport() {
                 ))}
               </dl>
               {!state.study_certificate && (
-                <p className="passport__note">Без справки об обучении фонд не примет заявку. Паспорт можно готовить и без неё.</p>
+                <p className="passport__note">Без справки об обучении фонд не примет заявку. Паспорт можно собрать и выгрузить и без неё.</p>
               )}
               <label className="passport__cert-pick">
                 <input type="file" accept={STUDY_CERTIFICATE_ACCEPT} onChange={(e) => void onCertificate(e)} disabled={busy} className="passport__cert-input" />

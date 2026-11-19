@@ -389,7 +389,7 @@ export function Onboarding() {
                     Справка об обучении<span aria-hidden="true" className="ob-required"> *</span>
                   </span>
                   <span className="onb-hint">
-                    Без справки из вуза фонд не примет заявку. Паспорт можно готовить и без неё — загрузите справку сейчас или позже в профиле.
+                    Без справки из вуза фонд не примет заявку. Паспорт можно собрать и выгрузить и без неё — загрузите справку сейчас или позже в профиле.
                   </span>
                   <label className="onb-cert__pick">
                     <input type="file" accept={STUDY_CERTIFICATE_ACCEPT} onChange={(e) => void onCertificate(e)} disabled={certificateBusy} className="onb-cert__input" />

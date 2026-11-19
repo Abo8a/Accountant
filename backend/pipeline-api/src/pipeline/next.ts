@@ -188,12 +188,22 @@ function gapQuestion(
     example: kb.example,
     criteria: kb.criteria,
     ...(suggestion ? { suggestion } : {}),
-    rejection_reason: blockAudit?.remark ?? null,
+    rejection_reason: remarkFor(blockAudit, gap),
     block_audits: auditReport?.block_audits,
     budget_audit: auditReport?.budget_audit,
     fatal_stop_factors: auditReport?.fatal_stop_factors,
     passport: buildPassportFields(records),
   };
+}
+
+/**
+ * Замечание аудита к блоку показываем только у полей, к которым аудит его отнёс (failed_fields). Иначе вопрос про одно поле
+ * шёл с замечанием про другое (в живом прогоне — вопрос о календарном плане с замечанием о заделе). Отчёты без failed_fields — как раньше.
+ */
+export function remarkFor(blockAudit: { remark: string | null; failed_fields?: string[] } | undefined, gap: TargetField): string | null {
+  if (!blockAudit?.remark) return null;
+  const failed = blockAudit.failed_fields ?? [];
+  return failed.length === 0 || failed.includes(gap.field_key) ? blockAudit.remark : null;
 }
 
 /** Вопрос-подтверждение: какое направление и вызов предлагаем и почему студент решает сам. */

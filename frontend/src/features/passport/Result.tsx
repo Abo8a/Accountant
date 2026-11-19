@@ -4,6 +4,7 @@ import type { PipelineCompleted } from '@passport/contracts';
 import { BrandMark } from '../../shared/ui/Logo/Logo';
 import { env } from '../../shared/config/env';
 import { loadFlow } from '../../shared/state/flow';
+import { STUDY_CERTIFICATE_WARNING } from '@passport/passport-core';
 import { useCabinetState } from '../../shared/state/cabinet';
 import { openGapsCount } from '../../shared/state/cabinetView';
 import type { CabinetState } from '../../shared/api/cabinet';
@@ -186,7 +187,12 @@ export function completedFromState(state: CabinetState): PipelineCompleted | und
 export function Result({ exportReady = false }: { exportReady?: boolean } = {}) {
   const last = env.liveApi ? loadFlow().last : undefined;
   const cabinet = useCabinetState();
-  const completed = last?.status === 'COMPLETED' ? last : cabinet ? completedFromState(cabinet) : undefined;
+  const lastOrState = last?.status === 'COMPLETED' ? last : cabinet ? completedFromState(cabinet) : undefined;
+  // Справку загрузили после проверки: её предупреждение больше не показываем (на итог оно не влияет).
+  const completed =
+    lastOrState && cabinet?.study_certificate
+      ? { ...lastOrState, warnings: lastOrState.warnings.filter((w) => w !== STUDY_CERTIFICATE_WARNING) }
+      : lastOrState;
 
   const [demoVerdict, setDemoVerdict] = useState<Verdict>('warn');
   const [checks, setChecks] = useState<Record<string, boolean>>(env.liveApi ? {} : { study: true });

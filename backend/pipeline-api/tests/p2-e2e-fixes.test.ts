@@ -10,6 +10,8 @@ import { FakeLlm } from '../src/llm/fake';
 import { createPipelineServer } from '../src/server';
 import { studentFacingRemark } from '../src/pipeline/remarks';
 import { detectCertificateMime } from '../src/pipeline/state';
+import { remarkFor } from '../src/pipeline/next';
+import { STUDY_CERTIFICATE_WARNING } from '@passport/passport-core';
 import { briefAndConfirm, confirmDirection, createTestDb, createUser, makeDeps, type TestDb } from './helpers';
 
 let db: TestDb;
@@ -244,6 +246,19 @@ describe('справка об обучении: обязательна для п
     expect(state.study_certificate).toMatchObject({ file_name: 'Справка МГТУ.pdf' });
   });
 
+  it('после загрузки справки кабинет сразу не показывает старое предупреждение', async () => {
+    const userId = await createUser(db.sql);
+    await briefAndConfirm(makeDeps(db, new FakeLlm({ extract: fullExtraction })), req(userId, { text_input: BRIEF }));
+    const { rows } = await db.sql.query('SELECT id FROM app_projects WHERE user_id = $1::uuid', [userId]);
+    const result = { eligibility_status: 'ELIGIBLE', summary: '', checklist: [], warnings: [STUDY_CERTIFICATE_WARNING, 'Другое предупреждение.'], calculated_at: '' };
+    await db.store.upsertField((rows[0] as { id: string }).id, 0, 'navigator_summary_and_checklist', JSON.stringify(result));
+    const warnings = async () =>
+      ((await (await fetch(`${base}/pipeline/state`, { headers: { 'x-user-id': userId } })).json()) as { result: { warnings: string[] } }).result.warnings;
+    expect(await warnings()).toContain(STUDY_CERTIFICATE_WARNING);
+    await db.store.saveStudyCertificate(userId, { file_name: 's.pdf', mime_type: 'application/pdf', sha256_hash: 'x', content: Buffer.from('%PDF') });
+    expect(await warnings()).toEqual(['Другое предупреждение.']);
+  });
+
   it('без справки — только предупреждение; итог и готовность к выгрузке те же, что со справкой', async () => {
     const run = async (withCertificate: boolean) => {
       const userId = await createUser(db.sql);
@@ -313,4 +328,14 @@ describe('замечания для студента', () => {
     expect(res.rejection_reason).not.toMatch(/[一-鿿]/);
     expect(res.rejection_reason).toContain('Опишите подробнее');
   }, 120_000);
+});
+
+describe('замечание блока у вопроса', () => {
+  it('показывается только у полей, к которым относится', () => {
+    const audit = { remark: 'Не указан опыт участников.', failed_fields: ['team_members', 'competencies_and_experience'] };
+    expect(remarkFor(audit, { section_id: 2, field_key: 'competencies_and_experience' })).toBe('Не указан опыт участников.');
+    expect(remarkFor(audit, { section_id: 2, field_key: 'team_size' })).toBeNull();
+    expect(remarkFor({ remark: 'Старый отчёт.' }, { section_id: 2, field_key: 'team_size' })).toBe('Старый отчёт.');
+    expect(remarkFor(undefined, { section_id: 2, field_key: 'team_size' })).toBeNull();
+  });
 });

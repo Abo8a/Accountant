@@ -118,7 +118,7 @@ export function LiveProfile() {
         <section className="profile__cert">
           <span className="profile__info-caption">Справка об обучении</span>
           <span className="profile__info-text">
-            {cert ? `Загружено: ${cert.file_name}` : 'Не загружена. Без справки из вуза фонд не примет заявку; паспорт можно готовить и без неё.'}
+            {cert ? `Загружено: ${cert.file_name}` : 'Не загружена. Без справки из вуза фонд не примет заявку, но паспорт можно собрать и выгрузить и без неё.'}
           </span>
           <label className="profile__cert-pick">
             <input type="file" accept={STUDY_CERTIFICATE_ACCEPT} onChange={(e) => void onCertificate(e)} disabled={busy} className="profile__cert-input" />

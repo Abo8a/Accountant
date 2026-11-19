@@ -2,6 +2,7 @@
 // Нужно экранам кабинета («Паспорт», «Итог», «Материалы», «Тариф»), когда ответа пайплайна нет в текущей вкладке.
 import { createHash } from 'node:crypto';
 import type { BlockAuditOut, BudgetAuditOut, PipelinePassportField } from '@passport/contracts';
+import { STUDY_CERTIFICATE_WARNING } from '@passport/passport-core';
 import { PipelineFailure } from '../errors';
 import type { StudyCertificateMeta, UserContext } from '../db/store';
 import type { PipelineDeps } from './deps';
@@ -33,6 +34,10 @@ export async function loadCabinetState(deps: PipelineDeps, ctx: UserContext): Pr
     result = rawResult ? JSON.parse(rawResult) : null;
   } catch {
     result = null;
+  }
+  // Справку загрузили после последней проверки: её предупреждение уже неактуально (на итог оно не влияет), не ждём пересчёта.
+  if (result && ctx.studyCertificate) {
+    result = { ...result, warnings: (result.warnings ?? []).filter((w) => w !== STUDY_CERTIFICATE_WARNING) };
   }
   return {
     status: 'OK',
