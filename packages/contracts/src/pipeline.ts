@@ -6,9 +6,11 @@ import type { BudgetCategory, ClaimKind, ClaimOrigin, ClaimType, ClaimVerificati
 /**
  * init_or_upload — бриф/файлы (шаги 1–5);
  * submit_answer — ответ на один пробел (U_LOOP);
- * submit_form — вся форма разом или точечные правки открытых блоков (шаги 3В и 7), без LLM-извлечения.
+ * submit_form — вся форма разом или точечные правки открытых блоков (шаги 3В и 7), без LLM-извлечения;
+ * save_draft — быстрое сохранение правок паспорта (поля, направление, смета) без вызова моделей: правка ждёт проверки;
+ * review_edits — «Проверить»: модель разом обрабатывает все сохранённые, но не проверенные правки, затем аудит изменённых блоков.
  */
-export type PipelineAction = 'init_or_upload' | 'submit_answer' | 'submit_form' | 'skip_gap';
+export type PipelineAction = 'init_or_upload' | 'submit_answer' | 'submit_form' | 'skip_gap' | 'save_draft' | 'review_edits';
 
 /** Ответы на анкету допуска: ключ вопроса → ответ «да/нет». Пункты и правила — в kb/programs/…/manifest.json. */
 export type EligibilityAnswers = Record<string, boolean>;
@@ -189,6 +191,12 @@ export interface PipelineRejected {
   reasons: { key: string; reason: string; how_to_fix: string }[];
 }
 
+/** Правка сохранена без проверки (save_draft). pending_review — ключи «секция/поле» (и «budget»), которые ждут «Проверить». */
+export interface PipelineSaved {
+  status: 'SAVED';
+  pending_review: string[];
+}
+
 /** Выгрузка готова: файл DOCX хранится в БД, скачивается по download_path (заголовок x-user-id). */
 export interface PipelineExportReady {
   status: 'EXPORT_READY';
@@ -204,6 +212,7 @@ export type PipelineResponse =
   | PipelineEligibilityRequired
   | PipelineRejected
   | PipelineExportReady
+  | PipelineSaved
   | PipelineError;
 
 export type ChatMessageRole = 'user' | 'assistant';

@@ -1,6 +1,6 @@
 // Задачи 1.4, 1.5, 3.2, 3.5: приём формы целиком или точечных правок открытых блоков (шаги 3В, 5 и 7).
 // Текстовые поля упаковываются через DeepSeek Flash (extractPassport) с подключением RAG, смета сохраняется напрямую.
-import type { PipelineRequest, PipelineResponse } from '@passport/contracts';
+import type { PipelineRequest, PipelineResponse, PipelineSwapBlocked } from '@passport/contracts';
 import { isValidPassportField } from '@passport/contracts';
 import type { DependencyNode } from '@passport/passport-core';
 import { PipelineFailure } from '../errors';
@@ -19,7 +19,7 @@ const CODE_FIELDS = new Set(['direction', 'tech_challenge']);
  * Выбор студента «направление + вызов». Направление без вызова = «без вызова»: прежний вызов снимается
  * (иначе остался бы вызов чужого направления). Вызов чужого направления не принимается.
  */
-async function writeDirectionChoice(
+export async function writeDirectionChoice(
   deps: PipelineDeps,
   projectId: string,
   values: { section_id: number; field_key: string; value: string }[],
@@ -49,22 +49,18 @@ async function writeDirectionChoice(
   }
 }
 
-export async function handleSubmitForm(deps: PipelineDeps, req: PipelineRequest, ctx: UserContext): Promise<PipelineResponse> {
-  const { store, llm, kb } = deps;
-  const form = req.form ?? [];
-  if (form.length === 0 && req.budget_items === undefined) {
-    throw new PipelineFailure('INVALID_FIELD_VALUE', 'Форма пуста: передайте поля или смету');
-  }
+export type FormValue = { section_id: number; field_key: string; value: string };
 
-  // 1. Проверка значений до любой записи: одно неверное поле — ничего не сохраняется.
-  const values: { section_id: number; field_key: string; value: string }[] = [];
+/** Проверка значений формы до любой записи: одно неверное поле — ничего не сохраняется. Пустое значение = «не менять». */
+export function checkFormValues(deps: PipelineDeps, form: PipelineRequest['form']): FormValue[] {
+  const values: FormValue[] = [];
   const problems: string[] = [];
-  for (const f of form) {
+  for (const f of form ?? []) {
     if (!isValidPassportField(f.section_id, f.field_key)) {
       problems.push(`Неизвестное поле ${f.section_id}/${f.field_key}.`);
       continue;
     }
-    const check = checkFieldValue(f.section_id, f.field_key, f.value, kb.tech_challenges);
+    const check = checkFieldValue(f.section_id, f.field_key, f.value, deps.kb.tech_challenges);
     if (!check.ok) {
       problems.push(`${f.field_key}: ${check.reason}`);
       continue;
@@ -74,24 +70,48 @@ export async function handleSubmitForm(deps: PipelineDeps, req: PipelineRequest,
   if (problems.length > 0) {
     throw new PipelineFailure('INVALID_FIELD_VALUE', problems.join(' '));
   }
+  return values;
+}
+
+/**
+ * Guard против чужих материалов для текстовых правок — только когда якорь уже есть и только по полям блоков 3–4
+ * (из них строится якорь). null — правки относятся к этому проекту.
+ */
+export async function guardFormValues(
+  deps: PipelineDeps,
+  ctx: UserContext,
+  projectId: string,
+  values: readonly FormValue[],
+): Promise<PipelineSwapBlocked | null> {
+  const textValues = values.filter((v) => !CODE_FIELDS.has(v.field_key) && GUARDED_ANSWER_SECTIONS.has(v.section_id));
+  if (!ctx.project?.anchorReady || textValues.length === 0) return null;
+  const joined = textValues.map((v) => v.value).join('\n\n');
+  const embedding = await deps.llm.embed(joined.slice(0, GUARD_QUERY_MAX_CHARS));
+  const guard = await deps.store.guardCheck(projectId, embedding, joined.slice(0, 500), ctx.thresholds);
+  if (guard.action !== 'blocked') return null;
+  return {
+    status: 'BLOCKED_PROJECT_SWAP',
+    similarity_score: Math.round(guard.score * 100) / 100,
+    message: 'Загруженные материалы относятся к другому проекту. По правилам платформы 1 аккаунт = 1 проект.',
+  };
+}
+
+export async function handleSubmitForm(deps: PipelineDeps, req: PipelineRequest, ctx: UserContext): Promise<PipelineResponse> {
+  const { store, kb } = deps;
+  const form = req.form ?? [];
+  if (form.length === 0 && req.budget_items === undefined) {
+    throw new PipelineFailure('INVALID_FIELD_VALUE', 'Форма пуста: передайте поля или смету');
+  }
+
+  // 1. Проверка значений до любой записи: одно неверное поле — ничего не сохраняется.
+  const values = checkFormValues(deps, form);
 
   // Пустое значение = «не менять» (поле не очищается).
   const projectId = ctx.project?.id ?? (await store.ensureProject(req.user_id));
-  const textValues = values.filter((v) => !CODE_FIELDS.has(v.field_key) && GUARDED_ANSWER_SECTIONS.has(v.section_id));
 
   // 2. Guard против чужих материалов — только когда якорь уже есть и только по полям блоков 3–4 (из них строится якорь).
-  if (ctx.project?.anchorReady && textValues.length > 0) {
-    const joined = textValues.map((v) => v.value).join('\n\n');
-    const embedding = await llm.embed(joined.slice(0, GUARD_QUERY_MAX_CHARS));
-    const guard = await store.guardCheck(projectId, embedding, joined.slice(0, 500), ctx.thresholds);
-    if (guard.action === 'blocked') {
-      return {
-        status: 'BLOCKED_PROJECT_SWAP',
-        similarity_score: Math.round(guard.score * 100) / 100,
-        message: 'Загруженные материалы относятся к другому проекту. По правилам платформы 1 аккаунт = 1 проект.',
-      };
-    }
-  }
+  const blocked = await guardFormValues(deps, ctx, projectId, values);
+  if (blocked) return blocked;
 
 
   // 4. Упаковка и запись полей через DeepSeek (extractPassport). Выбор направления и вызова — коды, их пишем напрямую:

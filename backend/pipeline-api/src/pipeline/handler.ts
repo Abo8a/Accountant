@@ -13,6 +13,7 @@ import { answerField, extractPassport } from './passport';
 import { GUARD_QUERY_MAX_CHARS, GUARDED_ANSWER_SECTIONS } from './anchor';
 import { gateEligibility } from './eligibility';
 import { handleSubmitForm } from './form';
+import { handleReviewEdits, handleSaveDraft } from './drafts';
 import { nextStep, skippedKeys } from './next';
 import { LoggedLlm } from '../llm/logged';
 import { screenStopFactors, stopFactorBriefQuestion } from './screen';
@@ -25,9 +26,9 @@ export const AI_CREDITS_EXHAUSTED_MESSAGE =
   'ИИ-кредиты закончились. Ручное редактирование, материалы и экспорт остаются доступны. ' +
   'Чтобы продолжить работу с ИИ, подключите «Пакет ИИ» в разделе «Тариф и оплата».';
 
-/** Действия, которые тратят ИИ-кредиты. Ручные правки формы и пропуск вопроса — бесплатны. */
+/** Действия, которые тратят ИИ-кредиты (в том числе «Проверить»). Ручные правки, сохранение и пропуск вопроса — бесплатны. */
 export function isAiAction(req: PipelineRequest): boolean {
-  if (req.action === 'submit_answer') return true;
+  if (req.action === 'submit_answer' || req.action === 'review_edits') return true;
   if (req.action === 'init_or_upload') return Boolean(req.text_input?.trim()) || (req.files?.length ?? 0) > 0;
   return false;
 }
@@ -137,6 +138,9 @@ async function run(deps: PipelineDeps, req: PipelineRequest, meter: CreditMeter)
   const gate = await gateEligibility(deps, req, ctx);
   if (gate) return gate;
 
+  // «Сохранить» — без моделей; «Проверить» — модель по всем сохранённым, но не проверенным правкам разом.
+  if (req.action === 'save_draft') return handleSaveDraft(deps, req, ctx);
+  if (req.action === 'review_edits') return handleReviewEdits(deps, req, ctx);
   if (req.action === 'submit_form') {
     return saveFieldForm(deps, req, ctx, await handleSubmitForm(deps, req, ctx));
   }

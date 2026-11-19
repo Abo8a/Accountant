@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const pipelineRequestSchema = z
   .object({
     user_id: z.string().uuid(),
-    action: z.enum(['init_or_upload', 'submit_answer', 'submit_form', 'skip_gap']),
+    action: z.enum(['init_or_upload', 'submit_answer', 'submit_form', 'skip_gap', 'save_draft', 'review_edits']),
     program: z.string().min(1).default('Студенческий стартап'),
     text_input: z.string().max(50_000).optional(),
     target_field: z
@@ -45,7 +45,7 @@ export const pipelineRequestSchema = z
       )
       .max(200)
       .optional(),
-    // Форма интерактивной анкеты для поля, которое сохраняется этим запросом (submit_answer / submit_form).
+    // Форма интерактивной анкеты для поля, которое сохраняется этим запросом (submit_answer / submit_form / save_draft).
     field_form: z
       .object({
         section_id: z.number().int().min(2).max(10),

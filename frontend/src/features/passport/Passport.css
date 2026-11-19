@@ -816,3 +816,75 @@ a.passport-claim.passport-claim--muted {
   line-height: var(--lh-text);
   color: var(--color-ink);
 }
+
+/* «Проверить»: кнопка в правом верхнем углу паспорта — вид как у ссылки «Итог проверки» */
+button.passport__btn-brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-h-nav);
+  padding: 0 var(--space-20);
+  border: 0;
+  background: var(--color-brand);
+  border-radius: var(--radius-pill);
+  color: var(--color-ink);
+  font: inherit;
+  font-weight: var(--font-bold);
+  font-size: var(--fs-15);
+  cursor: pointer;
+}
+
+button.passport__btn-brand:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Итог «Проверить» под кнопками */
+.passport__review-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-text);
+  color: var(--color-gray-600);
+  text-align: right;
+}
+
+/* Критерий фонда и пример заполнения в редакторе поля — значения из Gaps.dc.html */
+.passport__criteria {
+  display: flex;
+  gap: var(--space-12);
+  padding: var(--space-16) var(--space-18);
+  background: var(--color-gray-50);
+  border-radius: var(--radius-input);
+}
+
+.passport__criteria-icon {
+  flex: none;
+  color: var(--color-gray-600);
+}
+
+.passport__criteria-text {
+  font-size: var(--fs-15);
+  line-height: var(--lh-text);
+  color: var(--color-gray-800);
+}
+
+.passport__criteria-lead {
+  font-weight: var(--font-semibold);
+}
+
+.passport__example-summary {
+  font-size: var(--fs-16);
+  font-weight: var(--font-semibold);
+  color: var(--color-link);
+  cursor: pointer;
+}
+
+.passport__example-text {
+  margin: var(--space-12) 0 0;
+  padding: var(--space-16) var(--space-18);
+  background: var(--color-peach);
+  border-radius: var(--radius-input);
+  font-size: var(--fs-15);
+  line-height: var(--lh-body);
+  color: var(--color-gray-800);
+}

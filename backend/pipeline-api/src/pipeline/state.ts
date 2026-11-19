@@ -8,6 +8,9 @@ import type { AiCredits, ProjectFileRow, StudyCertificateMeta, UserContext } fro
 import type { PipelineDeps } from './deps';
 import { loadAuditReport } from './audit';
 import { buildPassportFields } from './passport';
+import { loadPendingReview } from './drafts';
+import { fieldKb } from '../kb/manifest';
+import { PASSPORT_SECTIONS } from '@passport/contracts';
 
 export interface CabinetState {
   status: 'OK';
@@ -25,8 +28,30 @@ export interface CabinetState {
   passport: PipelinePassportField[];
   block_audits: BlockAuditOut[];
   budget_audit: BudgetAuditOut | null;
+  /** Правки, сохранённые без проверки: ключи «секция/поле» и «budget». Их проверяет кнопка «Проверить». */
+  pending_review: string[];
+  /** Подсказки к полям из базы знаний: вопрос, что проверяет фонд и пример заполнения («Как обычно пишут»). */
+  field_hints: Record<string, FieldHint>;
   /** Итог последней проверки (шаг 8) или null, если паспорт ещё не дошёл до конца. */
   result: { eligibility_status: string; summary: string; checklist: string[]; warnings: string[]; calculated_at: string } | null;
+}
+
+export interface FieldHint {
+  question: string;
+  criteria: string;
+  example: string;
+}
+
+/** Подсказки ко всем полям паспорта (разделы 2–10) из манифеста программы. */
+function fieldHints(deps: PipelineDeps): Record<string, FieldHint> {
+  const out: Record<string, FieldHint> = {};
+  for (const s of PASSPORT_SECTIONS) {
+    for (const f of s.fields) {
+      const kb = fieldKb(deps.kb, s.id, f);
+      out[`${s.id}/${f}`] = { question: kb.question, criteria: kb.criteria, example: kb.example };
+    }
+  }
+  return out;
 }
 
 export async function loadCabinetState(deps: PipelineDeps, ctx: UserContext): Promise<CabinetState> {
@@ -57,6 +82,8 @@ export async function loadCabinetState(deps: PipelineDeps, ctx: UserContext): Pr
     passport: ctx.project?.hasRecords ? withFieldForms(buildPassportFields(records), await deps.store.getFieldForms(ctx.project.id)) : [],
     block_audits: report?.block_audits ?? [],
     budget_audit: report?.budget_audit ?? null,
+    pending_review: loadPendingReview(records),
+    field_hints: fieldHints(deps),
     result,
   };
 }

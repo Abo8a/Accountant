@@ -13,7 +13,7 @@ export interface FieldEditorProps {
   initialText: string;
   wasApproved: boolean;
   busy: boolean;
-  /** Вопрос пайплайна к этому полю, критерий фонда и пример. */
+  /** Вопрос пайплайна к этому полю; критерий фонда и пример заполнения — из базы знаний (подсказки поля). */
   question?: string;
   criteria?: string;
   example?: string;
@@ -56,8 +56,24 @@ export function FieldEditor(props: FieldEditorProps) {
   return (
     <div className="passport__editor">
       {question && <p className="passport__editor-question">{question}</p>}
-      {criteria && <p className="passport__note">{`Что проверяет фонд: ${criteria}`}</p>}
-      {example && <p className="passport__note">{`Как обычно пишут: ${example}`}</p>}
+      {/* Критерий фонда и пример заполнения — как в Gaps.dc.html: плашка с иконкой и раскрывающийся «Как обычно пишут». */}
+      {criteria && (
+        <div className="passport__criteria">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true" className="passport__criteria-icon">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 11v5M12 8h.01" />
+          </svg>
+          <span className="passport__criteria-text">
+            <b className="passport__criteria-lead">Что проверяет фонд:</b> {criteria}
+          </span>
+        </div>
+      )}
+      {example && (
+        <details className="passport__example">
+          <summary className="passport__example-summary">Как обычно пишут</summary>
+          <p className="passport__example-text">{example}</p>
+        </details>
+      )}
 
       {mode === 'form' && spec ? (
         <FieldForm
@@ -74,7 +90,7 @@ export function FieldEditor(props: FieldEditorProps) {
       ) : (
         <>
           <label htmlFor={inputId} className="passport__editor-hint">
-            Правка текста поля. После сохранения Буха заново найдёт каждое утверждение в тексте.
+            Правка текста поля. Сохранение — сразу, без проверки; по кнопке «Проверить» Буха проверит все правки и заново найдёт утверждения в тексте.
           </label>
           <textarea id={inputId} rows={4} value={draft} onChange={(e) => setDraft(e.target.value)} className="passport__textarea" />
         </>
