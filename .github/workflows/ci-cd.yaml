@@ -166,12 +166,25 @@ jobs:
       - name: "Environment file: server secrets and image tags for this commit"
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
+          # Выгрузка копий в Backblaze B2 — отдельные секреты окружения production, чтобы не пересобирать весь ENV_FILE.
+          # Значения, которых нет, в файл не попадают: тогда выгрузка просто не настроена (см. docs/backup.md).
+          BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_REGION: ${{ secrets.BACKUP_S3_REGION }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          BACKUP_S3_KEY_ID: ${{ secrets.BACKUP_S3_KEY_ID }}
+          BACKUP_S3_APPLICATION_KEY: ${{ secrets.BACKUP_S3_APPLICATION_KEY }}
+          BACKUP_ENCRYPTION_PASSWORD: ${{ secrets.BACKUP_ENCRYPTION_PASSWORD }}
+          BACKUP_ENCRYPTION_SALT: ${{ secrets.BACKUP_ENCRYPTION_SALT }}
         run: |
           {
             printf '%s\n' "$ENV_FILE"
             echo "IMAGE_PIPELINE=${IMAGE_PREFIX}-pipeline:${GITHUB_SHA}"
             echo "IMAGE_PARSER=${IMAGE_PREFIX}-parser:${GITHUB_SHA}"
             echo "IMAGE_FRONTEND=${IMAGE_PREFIX}-frontend:${GITHUB_SHA}"
+            for name in BACKUP_S3_ENDPOINT BACKUP_S3_REGION BACKUP_S3_BUCKET BACKUP_S3_KEY_ID BACKUP_S3_APPLICATION_KEY BACKUP_ENCRYPTION_PASSWORD BACKUP_ENCRYPTION_SALT; do
+              value=$(printenv "$name" || true)
+              if [ -n "$value" ]; then printf '%s=%s\n' "$name" "$value"; fi
+            done
           } > deploy.env
 
       - name: Copy configuration to server
@@ -186,8 +199,8 @@ jobs:
           scp -P "$SSH_PORT" docker-compose.yml docker-compose.prod.yml deploy.env "$SSH_USER@$HOST:$DEPLOY_PATH/"
           # Postgres монтирует эту папку при первом старте (схема auth и роли): без неё база поднимется без них.
           scp -P "$SSH_PORT" -r backend/supabase/local/. "$SSH_USER@$HOST:$DEPLOY_PATH/backend/supabase/local/"
-          # Caddy: SSL и basic auth на /admin-panel; backup.sh монтируется в контейнер backup (без файла Docker создал бы вместо него папку).
-          scp -P "$SSH_PORT" deploy/Caddyfile deploy/backup.sh "$SSH_USER@$HOST:$DEPLOY_PATH/deploy/"
+          # Caddy: SSL и basic auth на /admin-panel; backup*.sh монтируются в контейнеры backup и backup-sync (без файла Docker создал бы вместо него папку).
+          scp -P "$SSH_PORT" deploy/Caddyfile deploy/backup.sh deploy/backup-sync.sh "$SSH_USER@$HOST:$DEPLOY_PATH/deploy/"
           ssh -p "$SSH_PORT" "$SSH_USER@$HOST" "mv '$DEPLOY_PATH/deploy.env' '$DEPLOY_PATH/.env' && chmod 600 '$DEPLOY_PATH/.env'"
 
       - name: Update containers (docker compose waits for healthchecks)
