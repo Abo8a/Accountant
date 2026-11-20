@@ -84,14 +84,6 @@
   font-weight: var(--font-bold);
 }
 
-.gen-cta--outline {
-  padding: 0 var(--space-24);
-  border: 2px solid var(--color-ink);
-  color: var(--color-ink);
-  font-size: var(--fs-17);
-  font-weight: var(--font-semibold);
-}
-
 /* Ошибка сборки: цвет текста — --color-danger-deep (глубокий красный из эталона). */
 .gen-error {
   display: flex;

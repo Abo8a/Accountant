@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PASSPORT_SECTIONS } from '@passport/contracts';
+import { FIELD_FORM_SHAPES, PASSPORT_SECTIONS, sanitizeFieldForm } from '@passport/contracts';
 import { emptyForm, FIELD_FORMS, formFromData, formToSave, teamFromData, validateForm, type FormValue } from './schemas';
 
 const ctx = { team: ['Иван Иванов', 'Мария Петрова'] };
@@ -151,5 +151,29 @@ describe('анкеты полей: текст из формы', () => {
     expect(formFromData(FIELD_FORMS['10/active_obligations']!, { choice: 'Нет' })?.choice).toBe('Нет');
     expect(teamFromData({ rows: [{ name: ' Иван ' }, { name: '' }, {}] })).toEqual(['Иван']);
     expect(teamFromData(undefined)).toEqual([]);
+  });
+});
+
+describe('описание анкет для ИИ (FIELD_FORM_SHAPES) совпадает с анкетами кабинета', () => {
+  const cols = (c: { key: string; options?: string[] }[] | undefined) => c?.map((x) => ({ key: x.key, options: x.options ?? null }));
+  it('те же поля, варианты выбора, отметки и колонки', () => {
+    expect(Object.keys(FIELD_FORM_SHAPES).sort()).toEqual(Object.keys(FIELD_FORMS).sort());
+    for (const [key, spec] of Object.entries(FIELD_FORMS)) {
+      const shape = FIELD_FORM_SHAPES[key]!;
+      expect(shape.choice?.options, key).toEqual(spec.choice?.options);
+      const teamFlags = spec.flags?.options({ team: ['__team__'] });
+      const flagOptions = teamFlags && teamFlags[0] === '__team__' ? 'team' : teamFlags;
+      expect(shape.flags?.options, key).toEqual(flagOptions);
+      expect(cols(shape.inputs?.columns), key).toEqual(cols(spec.inputs?.columns));
+      expect(cols(shape.rows?.columns), key).toEqual(cols(spec.rows?.columns));
+      expect(!!shape.text, key).toBe(!!spec.text);
+    }
+  });
+
+  it('анкета, которую разложил ИИ, открывается в кабинете', () => {
+    const data = sanitizeFieldForm(FIELD_FORM_SHAPES['10/active_obligations']!, { choice: 'Есть', text: 'договор НИОКР' });
+    const form = formFromData(FIELD_FORMS['10/active_obligations']!, data);
+    expect(form).toMatchObject({ choice: 'Есть', text: 'договор НИОКР' });
+    expect(save('10/active_obligations', form!)).toMatchObject({ ok: true, text: 'Открытые обязательства: договор НИОКР' });
   });
 });

@@ -78,7 +78,8 @@ describe('Generating', () => {
     expect(within(tiles).getByText('Осталось пробелов')).toBeInTheDocument();
     expect(within(tiles).getByText('включая направление и смету')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ответить на вопросы' })).toHaveAttribute('href', '/passport');
-    expect(screen.getByRole('link', { name: 'Сначала посмотреть паспорт' })).toHaveAttribute('href', '/passport');
+    // Одна кнопка: «Сначала посмотреть паспорт» вела туда же, раздела «Пробелы» больше нет
+    expect(screen.queryByRole('link', { name: 'Сначала посмотреть паспорт' })).not.toBeInTheDocument();
     expect(screen.getByText('18')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Буха читает материалы' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Обычно это занимает/)).not.toBeInTheDocument();

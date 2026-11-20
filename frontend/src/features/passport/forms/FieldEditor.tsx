@@ -4,9 +4,9 @@ import { FieldForm } from './FieldForm';
 import { emptyForm, formFromData, formToSave, type FieldFormSpec, type FormCtx, type FormValue } from './schemas';
 import './FieldForm.css';
 
-// Редактор поля паспорта в блоке: интерактивная анкета (если она есть для поля) или текст.
-// Форма открывается сразу, когда поле пустое или уже сохранено из формы; текст, который написали словами
-// (или собрала Буха по брифу), правится текстом — с кнопкой «Заполнить формой».
+// Редактор поля паспорта в блоке. Есть анкета для поля — только анкета (без переключения на текст):
+// открывается сохранённая форма или пустая. Анкеты нет — правка текста.
+// Пример «Как обычно пишут» у полей с выбором не показываем: там выбирают вариант, а не пишут текст.
 
 export interface FieldEditorProps {
   inputId: string;
@@ -31,14 +31,13 @@ export interface FieldEditorProps {
 
 export function FieldEditor(props: FieldEditorProps) {
   const { inputId, initialText, wasApproved, busy, question, criteria, example, rejection, onHelp, spec, formData, ctx, onSave, onCancel } = props;
-  const saved = spec ? formFromData(spec, formData) : null;
-  const [mode, setMode] = useState<'form' | 'text'>(spec && (saved || !initialText.trim()) ? 'form' : 'text');
-  const [form, setForm] = useState<FormValue>(() => saved ?? (spec ? emptyForm(spec, ctx) : {}));
+  const [form, setForm] = useState<FormValue>(() => (spec ? (formFromData(spec, formData) ?? emptyForm(spec, ctx)) : {}));
   const [draft, setDraft] = useState(initialText);
   const [error, setError] = useState<string | null>(null);
+  const showExample = !!example && !spec?.choice;
 
   function save() {
-    if (mode === 'text' || !spec) {
+    if (!spec) {
       onSave(draft.trim());
       return;
     }
@@ -51,7 +50,7 @@ export function FieldEditor(props: FieldEditorProps) {
     onSave(res.text, res.data);
   }
 
-  const canSave = mode === 'form' ? !busy : !busy && !!draft.trim();
+  const canSave = spec ? !busy : !busy && !!draft.trim();
 
   return (
     <div className="passport__editor">
@@ -68,14 +67,14 @@ export function FieldEditor(props: FieldEditorProps) {
           </span>
         </div>
       )}
-      {example && (
+      {showExample && (
         <details className="passport__example">
           <summary className="passport__example-summary">Как обычно пишут</summary>
           <p className="passport__example-text">{example}</p>
         </details>
       )}
 
-      {mode === 'form' && spec ? (
+      {spec ? (
         <FieldForm
           id={inputId}
           spec={spec}
@@ -94,35 +93,6 @@ export function FieldEditor(props: FieldEditorProps) {
           </label>
           <textarea id={inputId} rows={4} value={draft} onChange={(e) => setDraft(e.target.value)} className="passport__textarea" />
         </>
-      )}
-
-      {spec && mode === 'text' && (
-        <button
-          type="button"
-          className="ff__switch"
-          disabled={busy}
-          onClick={() => {
-            setForm(saved ?? emptyForm(spec, ctx));
-            setMode('form');
-          }}
-        >
-          Заполнить формой
-        </button>
-      )}
-      {spec && mode === 'form' && (
-        <button
-          type="button"
-          className="ff__switch"
-          disabled={busy}
-          onClick={() => {
-            const res = formToSave(spec, form, ctx);
-            if (res.ok) setDraft(res.text);
-            setError(null);
-            setMode('text');
-          }}
-        >
-          Написать текстом
-        </button>
       )}
 
       {error && (

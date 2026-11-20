@@ -16,6 +16,13 @@ const claimSchema = z.object({
 
 export const anchorSchema = z.object({ anchor_summary: z.string().min(1) });
 
+/** Раскладка текста полей по анкетам: данные проверяются отдельно (sanitizeFieldForm), здесь — только каркас. */
+export const fillFormsSchema = z.object({
+  forms: z
+    .array(z.object({ section_id: z.number().int(), field_key: z.string(), data: z.record(z.string(), z.unknown()).nullable().catch(null) }))
+    .catch([]),
+});
+
 export const extractSchema = z.object({
   fields: z.array(
     z.object({

@@ -35,6 +35,8 @@ export function resolveLlmParams(task: LlmTask, input?: unknown): LlmTaskParams 
       return { reasoningEffort: 'medium', temperature: 0.1 };
     // Ранняя проверка стоп-факторов по брифу: короткий вход, ответ «да/нет» — глубокие рассуждения не нужны
     case 'screen':
+    // Раскладка текста по анкетам: короткий вход, сведения уже в тексте — глубокие рассуждения не нужны
+    case 'fill_forms':
       return { reasoningEffort: 'low', temperature: 0.1 };
     case 'consultant':
       return Boolean((input as Record<string, unknown> | null | undefined)?.thinking) === true

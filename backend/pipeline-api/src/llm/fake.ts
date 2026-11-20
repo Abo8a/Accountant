@@ -238,6 +238,10 @@ function defaultResponse(task: LlmTask, input: any): unknown {
     case 'screen':
       return { fatal_stop_factors: [] };
 
+    // По умолчанию анкеты не раскладываются: тесты, которым это нужно, задают ответ сами
+    case 'fill_forms':
+      return { forms: [] };
+
     case 'navigator':
       return { summary: 'Паспорт сформирован автоматически (тестовая заглушка).', checklist: ['Проверьте данные перед подачей.'] };
 

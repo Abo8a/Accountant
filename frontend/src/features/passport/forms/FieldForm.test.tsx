@@ -65,27 +65,31 @@ describe('FieldEditor — интерактивная анкета', () => {
     expect(onSave).toHaveBeenCalledWith('Свидетельств РИД нет; подача заявки запланирована.', expect.objectContaining({ choice: 'Нет', flags: ['Планируем подать заявку'] }));
   });
 
-  it('текст, написанный словами, правится текстом; «Заполнить формой» открывает анкету', async () => {
+  it('есть анкета — только анкета, даже если текст поля написан словами; переключателей на текст нет', async () => {
     const user = userEvent.setup();
     const onSave = renderEditor('10/active_obligations', { initialText: 'Открытых договоров нет.' });
-    expect(screen.getByRole('textbox')).toHaveValue('Открытых договоров нет.');
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Написать текстом' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Заполнить формой' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('radio', { name: 'Нет' }));
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
-    expect(onSave).toHaveBeenCalledWith('Открытых договоров нет.');
-    await user.click(screen.getByRole('button', { name: 'Заполнить формой' }));
-    expect(screen.getByRole('radio', { name: 'Нет' })).toBeInTheDocument();
+    expect(onSave).toHaveBeenCalledWith('Открытых договоров и обязательств нет.', expect.objectContaining({ choice: 'Нет' }));
+  });
+
+  it('у поля с выбором нет примера «Как обычно пишут»', () => {
+    renderEditor('10/previous_grants_and_statuses', { criteria: 'Перечислены поддержки.', example: 'Ранее грантов не получали.' });
+    expect(screen.getByText('Что проверяет фонд:')).toBeInTheDocument();
+    expect(screen.queryByText('Как обычно пишут')).not.toBeInTheDocument();
+  });
+
+  it('у таблицы пример «Как обычно пишут» есть', () => {
+    renderEditor('2/team_members', { example: 'В команде 3 человека.' });
+    expect(screen.getByText('Как обычно пишут')).toBeInTheDocument();
   });
 
   it('сохранённая форма открывается как была, даже если ИИ переписал текст', () => {
     renderEditor('2/team_members', { initialText: 'Команда из двух человек…', formData: { rows: [{ name: 'Иван', role: 'код' }] } });
     expect(screen.getByRole('textbox', { name: 'ФИО, строка 1' })).toHaveValue('Иван');
-  });
-
-  it('«Написать текстом» переносит собранный текст в поле', async () => {
-    const user = userEvent.setup();
-    renderEditor('10/active_obligations');
-    await user.click(screen.getByRole('radio', { name: 'Нет' }));
-    await user.click(screen.getByRole('button', { name: 'Написать текстом' }));
-    expect(screen.getByRole('textbox')).toHaveValue('Открытых договоров и обязательств нет.');
   });
 
   it('опыт команды: участники подставляются из анкеты команды', () => {
