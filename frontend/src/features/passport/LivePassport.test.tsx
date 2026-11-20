@@ -161,13 +161,22 @@ describe("LivePassport — доработка в блоках", () => {
       expect(mocks.call).toHaveBeenCalledWith({ action: 'save_draft', form: [{ section_id: 6, field_key: 'novelty_hypothesis', value: 'Быстрее аналогов' }] }),
     );
 
-    await user.click(screen.getByRole('button', { name: /Команда/ }));
+    await user.click(screen.getByRole('button', { name: /Продукт/ }));
+    const product = screen.getByRole('heading', { level: 3, name: 'Кратко о продукте' }).closest('article')!;
+    await user.click(within(product).getByRole('button', { name: 'Править' }));
+    await user.click(within(product).getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(mocks.call).toHaveBeenCalledWith({ action: 'save_draft', form: [{ section_id: 4, field_key: 'product_summary', value: 'Сервис для бухгалтерии' }] }),
+    );
+  });
+
+  it('поле с анкетой открывается анкетой, даже если текст написан словами', async () => {
+    const user = userEvent.setup();
+    renderAt('/passport?block=2');
     const team = screen.getByRole('heading', { level: 3, name: 'Состав команды' }).closest('article')!;
     await user.click(within(team).getByRole('button', { name: 'Править' }));
-    await user.click(within(team).getByRole('button', { name: 'Сохранить' }));
-    await waitFor(() =>
-      expect(mocks.call).toHaveBeenCalledWith({ action: 'save_draft', form: [{ section_id: 2, field_key: 'team_members', value: 'Иван — разработчик' }] }),
-    );
+    expect(within(team).getByRole('textbox', { name: 'ФИО, строка 1' })).toBeInTheDocument();
+    expect(within(team).queryByRole('button', { name: 'Написать текстом' })).not.toBeInTheDocument();
   });
 
   it('сохранённая, но не проверенная правка помечена «Не проверено»', () => {

@@ -20,6 +20,7 @@ import { retrieveRagContext } from '../rag/retriever';
 import type { DirectionCode } from '../rag/types';
 import type { ClaimDraft, ClaimRow, RecordRow, SourceRow } from '../db/store';
 import type { PipelineDeps } from './deps';
+import { fillFieldForms } from './formFill';
 
 const MAX_SOURCE_CHARS = 60_000;
 const MIN_FIELD_LENGTH = 10; // length(trim(value)) > 10 — ТЗ, ШАГ 6 (G4)
@@ -427,6 +428,11 @@ export async function extractPassport(
       });
     }
   }
+
+  // Поля, которые ИИ заполнил из брифа или документов, раскладываем по анкетам («да/нет», таблицы), чтобы в кабинете
+  // открывалась заполненная анкета. Поля, присланные студентом (formFields), не трогаем: их анкету сохраняет сам студент.
+  const explicit = new Set((formFields ?? []).map((f) => `${f.section_id}/${f.field_key}`));
+  await fillFieldForms(deps, projectId, [...processedKeys].filter((k) => !explicit.has(k)));
 
   // Зависимые считаем после всех записей, если changedSet не передан из вызывающего контекста
   if (!changedSet) {

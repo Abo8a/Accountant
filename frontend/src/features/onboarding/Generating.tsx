@@ -230,12 +230,10 @@ export function Generating() {
                   <span className="gen-tile-stat__note">включая направление и смету</span>
                 </li>
               </ul>
+              {/* Раздела «Пробелы» больше нет: вопросы — в блоках паспорта, поэтому одна кнопка вместо двух из Generating.dc.html. */}
               <div className="gen-actions">
                 <Link to="/passport" className="gen-cta gen-cta--primary">
                   Ответить на вопросы
-                </Link>
-                <Link to="/passport" className="gen-cta gen-cta--outline">
-                  Сначала посмотреть паспорт
                 </Link>
               </div>
             </div>

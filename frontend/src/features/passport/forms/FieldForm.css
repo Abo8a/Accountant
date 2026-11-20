@@ -21,6 +21,11 @@
   color: var(--color-gray-600);
 }
 
+/* legend не участвует в gap группы — отступ до вариантов задаём ему самому (тот же 8px, что между вариантами) */
+.ff__group > legend.ff__label {
+  margin-bottom: var(--space-8);
+}
+
 .ff__optional {
   font-weight: var(--font-regular);
   color: var(--color-gray-500);
@@ -200,17 +205,6 @@
   font-size: var(--fs-13);
   font-weight: var(--font-bold);
   color: var(--color-gray-500);
-}
-
-.ff__switch {
-  align-self: flex-start;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  font: var(--font-semibold) var(--fs-14) var(--font-sans);
-  color: var(--color-link);
-  text-decoration: underline;
-  cursor: pointer;
 }
 
 .ff__error {

@@ -2,7 +2,8 @@
 // «Сохранить» пишет текст студента как есть, без вызова моделей: правка помечается «ждёт проверки».
 // «Проверить» разом отдаёт модели все такие правки (упаковка текста и утверждения — один вызов extractPassport),
 // затем аудит изменённых блоков (точечный ре-аудит или первичный аудит) — замечания обновляются по всему паспорту.
-import type { PipelineRequest, PipelineResponse, PipelineSaved } from '@passport/contracts';
+import { FIELD_FORM_SHAPES, type PipelineRequest, type PipelineResponse, type PipelineSaved } from '@passport/contracts';
+import { fillFieldForms } from './formFill';
 import type { DependencyNode } from '@passport/passport-core';
 import { PipelineFailure } from '../errors';
 import type { RecordRow, UserContext } from '../db/store';
@@ -130,6 +131,8 @@ export async function handleReviewEdits(deps: PipelineDeps, req: PipelineRequest
     }
   }
   await savePendingReview(deps, projectId, []);
+  // Паспорта, собранные до раскладки по анкетам: поля с текстом без анкеты получают её здесь (поля с анкетой пропускаются).
+  await fillFieldForms(deps, projectId, Object.keys(FIELD_FORM_SHAPES));
 
   const after = await store.getRecords(projectId);
   const skipped = new Set([...skippedKeys(req.skipped_fields), ...findGaps(after).map(gapKey)]);
